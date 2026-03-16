@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="rt">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/Downloads/jdk-8u271-linux-x64/jdk1.8.0_271/jre/lib/rt.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

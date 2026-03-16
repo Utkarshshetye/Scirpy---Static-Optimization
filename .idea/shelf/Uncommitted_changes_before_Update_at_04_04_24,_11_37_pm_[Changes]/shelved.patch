@@ -1,0 +1,2914 @@
+Index: parsePythonIR/src/ir/expr/Compare.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.expr;\n\nimport ir.IExpr;\nimport ir.JPExpr;\nimport ir.internalast.JPValueBox;\nimport org.jboss.util.NotImplementedException;\nimport soot.Local;\nimport soot.Value;\nimport soot.ValueBox;\nimport soot.jimple.ConditionExpr;\n\nimport java.util.ArrayList;\nimport java.util.List;\n//TODO for soot compatibility, only single comparator, modify it to handle complicated comparisons..\n\npublic class Compare extends JPExpr implements IExpr, ConditionExpr {\n\n    int col_offset;\n    int lineno;\n    List<IExpr> comparators=new ArrayList<>();\n    IExpr left;\n    List<OpsType> ops=new ArrayList<>();\n    boolean isReverse=false;\n\n\n    public int getCol_offset() {\n        return col_offset;\n    }\n\n    public void setCol_offset(int col_offset) {\n        this.col_offset = col_offset;\n    }\n\n    public int getLineno() {\n        return lineno;\n    }\n\n    public void setLineno(int lineno) {\n        this.lineno = lineno;\n    }\n\n    public List<IExpr> getComparators() {\n        return comparators;\n    }\n\n    public void setComparators(List<IExpr> comparators) {\n        this.comparators = comparators;\n    }\n\n    public IExpr getLeft() {\n        return left;\n    }\n\n    public void setLeft(IExpr left) {\n        this.left = left;\n    }\n\n    public List<OpsType> getOps() {\n        return ops;\n    }\n\n    public void setOps(List<OpsType> ops) {\n        this.ops = ops;\n    }\n\n    public boolean isReverse() {\n        return isReverse;\n    }\n\n    public void setReverse(boolean reverse) {\n        isReverse = reverse;\n    }\n\n    //TODO ALL these will need modification to handle complex conditions\n    @Override\n    public Value getOp1() {\n        return left;\n    }\n\n    @Override\n    public Value getOp2() {\n        return comparators.get(0);\n    }\n\n    @Override\n    public ValueBox getOp1Box() {\n        JPValueBox valueBox = new JPValueBox(left);\n        return valueBox;\n\n    }\n\n    @Override\n    public ValueBox getOp2Box() {\n        JPValueBox valueBox = new JPValueBox(comparators.get(0));\n        return valueBox;\n    }\n\n    @Override\n    public void setOp1(Value value) {\n\n    }\n\n    @Override\n    public void setOp2(Value value) {\n\n    }\n\n    @Override\n    public String getSymbol() {\n        return ops.get(0).toString();\n    }\n\n    public void copyLineInfo(Compare cmp) {\n        this.setCol_offset(cmp.getCol_offset());\n        this.setLineno(cmp.getLineno());\n    }\n\n    @Override\n    public String toString() {\n       int i=0;\n       String stmt= \"(\" + left.toString();\n       for (OpsType op: ops){\n        stmt=stmt+\" \"+op.getSymbol()+\" \"+comparators.get(i).toString();\n           i++;\n       }\n       return stmt+\")\";\n\n    }\n    @Override\n    public Object clone(){\n        Compare compare=new Compare();\n        compare.setCol_offset(col_offset);\n        compare.setLineno(lineno);\n        compare.setLeft((IExpr)left.clone());\n        for(IExpr comparator:comparators){\n            compare.getComparators().add((IExpr)comparator.clone());\n        }\n        compare.setOps(ops);\n        return compare;\n    }\n\n    @Override\n    public List<Local> getLocals() {\n        List<Local> listL=new ArrayList<>();\n        for(Object val:comparators) {\n            if (val instanceof IExpr){\n                listL.addAll(((IExpr)val).getLocals());\n            }\n\n        }\n        listL.addAll(left.getLocals());\n        return listL;\n    }\n\n\n    @Override\n    public List<Name> getDataFrames() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFrames not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/expr/Compare.java b/parsePythonIR/src/ir/expr/Compare.java
+--- a/parsePythonIR/src/ir/expr/Compare.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/expr/Compare.java	(date 1710883335686)
+@@ -155,9 +155,9 @@
+ 
+     @Override
+     public List<Name> getDataFrames() {
+-        List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFrames not implemented in " + this.getClass().getSimpleName());
++        List<Name> dataframes = left.getDataFrames();
++        for(IExpr expr : comparators)
++            dataframes.addAll(expr.getDataFrames());
+         return dataframes;
+     }
+ }
+Index: parsePythonIR/src/ForceCompute/ForceCompute.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>// Chiranmoy 10-2-24: Add .compute(live_df=[...]) when dataframe passed to imported methods\npackage ForceCompute;\n\nimport analysis.LiveVariable.LiveDataFrame;\nimport analysis.PythonScene;\nimport cfg.CFG;\nimport ir.IExpr;\nimport ir.JPMethod;\nimport ir.Stmt.*;\nimport ir.expr.Call;\nimport ir.expr.Name;\nimport org.jboss.util.NotImplementedException;\nimport soot.Unit;\nimport java.util.ArrayList;\nimport java.util.List;\n\npublic class ForceCompute {\n    JPMethod jpMethod;\n    CFG cfg;\n    LiveDataFrame ldf;\n\n    public ForceCompute(JPMethod jpMethod, LiveDataFrame ldf) {\n        this.jpMethod = jpMethod;\n        this.ldf = ldf;\n        this.cfg = new CFG(jpMethod);\n    }\n\n    public void force() {\n        for (Unit unit : cfg.getUnitGraph()) {\n            List<String> liveList = new ArrayList<>();\n            ldf.getFlowAfter(unit).forEach(liveList::add);\n\n//            if(liveList.isEmpty())\n//                continue;\n\n            if(unit instanceof AssignmentStmtSoot) {\n                AssignStmt assStmt = ((AssignmentStmtSoot) unit).getAssignStmt();\n                IExpr rhs = assStmt.getRHS();\n\n                if(rhs instanceof Call) {\n                    forceComputeCall((Call) rhs, liveList);\n                }\n            } else if(unit instanceof CallExprStmt) {\n                Call call = (Call) ((CallExprStmt) unit).getCallExpr();\n                forceComputeCall(call, liveList);\n            } else if(!(unit instanceof ImportFrom || unit instanceof ImportStmt || unit instanceof AssignStmt)) {\n                throw new NotImplementedException(\"Stmt \" + unit + \" not implemented in force compute\");\n            }\n        }\n    }\n\n    private void forceComputeCall(Call call, List<String> liveList) {\n        String baseName = call.getBaseName();\n        if(!PythonScene.imported.contains(baseName))\n            return;\n\n        List<Name> used = call.getDataFrames();\n\n        for(int i=used.size()-1; i>0; i--) {\n            liveList.add(used.get(i).getName());\n        }\n\n        for(Name name : call.getDataFrames()) {\n            name.setName(name.getName() + \".compute(live_df=[\" + String.join(\", \", liveList) + \"])\");\n            if(used.size() > 1)\n                liveList.remove(liveList.size()-1);\n        }\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ForceCompute/ForceCompute.java b/parsePythonIR/src/ForceCompute/ForceCompute.java
+--- a/parsePythonIR/src/ForceCompute/ForceCompute.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ForceCompute/ForceCompute.java	(date 1710273326053)
+@@ -1,4 +1,4 @@
+-// Chiranmoy 10-2-24: Add .compute(live_df=[...]) when dataframe passed to imported methods
++// Chiranmoy 10-2-24: Add .compute(live_df=[...]) when dataframe has to be computed passed to imported methods
+ package ForceCompute;
+ 
+ import analysis.LiveVariable.LiveDataFrame;
+@@ -7,8 +7,11 @@
+ import ir.IExpr;
+ import ir.JPMethod;
+ import ir.Stmt.*;
++import ir.expr.Attribute;
+ import ir.expr.Call;
++import ir.expr.Expr_Context;
+ import ir.expr.Name;
++import ir.internalast.Keyword;
+ import org.jboss.util.NotImplementedException;
+ import soot.Unit;
+ import java.util.ArrayList;
+@@ -30,9 +33,6 @@
+             List<String> liveList = new ArrayList<>();
+             ldf.getFlowAfter(unit).forEach(liveList::add);
+ 
+-//            if(liveList.isEmpty())
+-//                continue;
+-
+             if(unit instanceof AssignmentStmtSoot) {
+                 AssignStmt assStmt = ((AssignmentStmtSoot) unit).getAssignStmt();
+                 IExpr rhs = assStmt.getRHS();
+@@ -43,12 +43,33 @@
+             } else if(unit instanceof CallExprStmt) {
+                 Call call = (Call) ((CallExprStmt) unit).getCallExpr();
+                 forceComputeCall(call, liveList);
+-            } else if(!(unit instanceof ImportFrom || unit instanceof ImportStmt || unit instanceof AssignStmt)) {
++            } else if(unit instanceof IfStmt) {
++                handleIfStmt((IfStmt) unit, liveList);
++            } else if(!(unit instanceof GotoStmt || unit instanceof NopStmt || unit instanceof ImportFrom || unit instanceof ImportStmt || unit instanceof AssignStmt)) {
+                 throw new NotImplementedException("Stmt " + unit + " not implemented in force compute");
+             }
+         }
+     }
+ 
++    private void handleIfStmt(IfStmt unit, List<String> liveList) {
++        if(unit.getTypePyStmt().equals("for")) {
++            ForStmtPy forStmtPy = (ForStmtPy) unit.getPyStmt();
++            IExpr iterator = forStmtPy.getIterator();
++
++            if(!iterator.getDataFrames().isEmpty() && PythonScene.allDfNames.contains(iterator.getDataFrames().get(0).getName())) {
++                Attribute attr = new Attribute();
++                attr.setAttr("compute");
++                attr.setValue(iterator);
++                Call compute = new Call();
++                compute.setFunc(attr);
++                compute.getKeywords().add(new Keyword("live_df", new Name("[" + String.join(", ", liveList) + "]", Expr_Context.Load)));
++                forStmtPy.setIterator(compute);
++            }
++        } else {
++            throw new NotImplementedException("Not implemented in handleIfStmt" + this.getClass().getSimpleName());
++        }
++    }
++
+     private void forceComputeCall(Call call, List<String> liveList) {
+         String baseName = call.getBaseName();
+         if(!PythonScene.imported.contains(baseName))
+Index: pythonIR/test.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import pandas as pd\nimport matplotlib.pyplot as plt\n\ndf = pd.read_csv('/home/chiranmoy/IdeaProjects/data/yellow_tripdata_2015-01.csv', parse_dates=[\"tpep_pickup_datetime\"])\ndf = df[(df.fare_amount > 0)]\ndf['day'] = df.tpep_pickup_datetime.dt.dayofweek\n\npassengers_per_day = df.groupby(['day'])['passenger_count'].sum()\n\nplt.plot(passengers_per_day)\nplt.show()\n\nprint(passengers_per_day)\n\navg_fare = df.fare_amount.mean()\nprint(f'Average fare amount: {avg_fare}')\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/pythonIR/test.py b/pythonIR/test.py
+--- a/pythonIR/test.py	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/pythonIR/test.py	(date 1711804187695)
+@@ -1,16 +1,44 @@
+ import pandas as pd
+ import matplotlib.pyplot as plt
+ 
+-df = pd.read_csv('/home/chiranmoy/IdeaProjects/data/yellow_tripdata_2015-01.csv', parse_dates=["tpep_pickup_datetime"])
+-df = df[(df.fare_amount > 0)]
+-df['day'] = df.tpep_pickup_datetime.dt.dayofweek
++
++file_path = '/home/chiranmoy/IdeaProjects/data/fbi_reports.csv'
++fbi_data = pd.read_csv(file_path)
+ 
+-passengers_per_day = df.groupby(['day'])['passenger_count'].sum()
++fbi_data.info()
++print(fbi_data.head())
+ 
+-plt.plot(passengers_per_day)
+-plt.show()
++plt.title("Incidents by Year")
++plt.xlabel("Year")
++plt.ylabel("Number of Incidents")
++incidents_by_year = fbi_data.groupby('Year').count()
++plt.plot(incidents_by_year)
++plt.xticks(rotation=20)
++plt.savefig('fig1.png')
++plt.close()
+ 
+-print(passengers_per_day)
++plt.title("Top 10 Weapons Used")
++weapons_distribution = fbi_data['Weapon'].value_counts().head(10)
++weapons_labels = weapons_distribution.index
++plt.pie(weapons_distribution, labels=weapons_labels, explode=[0]*3+[.25]*3+[.75]*4, autopct='%1.1f%%')
++plt.savefig('fig2.png')
++plt.close()
+ 
+-avg_fare = df.fare_amount.mean()
+-print(f'Average fare amount: {avg_fare}')
++plt.title("Top 10 Most Dangerous Cities")
++plt.xlabel("City")
++plt.ylabel("Number of Incidents")
++dangerous_cities = fbi_data['City'].value_counts().head(10)
++cities_label = dangerous_cities.index
++plt.bar(x=cities_label, height=dangerous_cities)
++plt.xticks(rotation=20)
++plt.savefig('fig3.png')
++plt.close()
++
++average_victim_age_by_race = fbi_data.groupby('Victim Race')['Victim Age'].mean()
++print("Average Victim Age by Race:")
++print(average_victim_age_by_race)
++
++total_victims = fbi_data['Victim Count'].sum()
++total_perpetrators = fbi_data['Perpetrator Count'].sum()
++print(f"Total Number of Victims: {total_victims}")
++print(f"Total Number of Perpetrators: {total_perpetrators}")
+Index: parsePythonIR/src/parse/IRParser.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package parse;\n\nimport analysis.PythonScene;\nimport ast.StmtAST;\nimport ir.IExpr;\nimport ir.JPBody;\nimport ir.JPMethod;\nimport ir.Stmt.*;\nimport ir.expr.*;\nimport ir.internalast.Alias;\nimport ir.internalast.InternalASTType;\nimport ir.internalast.JPValueBox;\nimport org.json.simple.JSONArray;\nimport org.json.simple.JSONObject;\nimport soot.*;\nimport soot.jimple.EqExpr;\nimport soot.jimple.Jimple;\nimport soot.jimple.NopStmt;\nimport soot.options.Options;\nimport soot.util.Chain;\nimport soot.util.HashChain;\n\nimport java.util.*;\n\nimport static java.lang.System.exit;\n\npublic class IRParser {\n\n    PatchingChain<Unit> units = new PatchingChain<Unit>(new HashChain<Unit>());\n    Chain<Local> locals = new HashChain<Local>();\n    int i=0;\n    HashMap<Integer,String> sourceMap;\n\n    public JPBody getIR(JSONArray stmtList){\n        return getIR(stmtList,\"dummy\");\n    }\n    public JPBody   getIR(JSONArray stmtList, String methodName){\n        return getIR(stmtList,methodName, null);\n    }\n\n\n\n    String sourceFile;\n    //TODO  parameter types not initialized\n    public JPBody getIR(JSONArray stmtList, String methodName, List parameterTypes){\n        stmtList.forEach(stmt -> parseCodeBlock((JSONObject) stmt));\n        JPMethod jpMethod=null;\n\n        //TODO this is dummy, modify it with actual list later on\n\n        //String name, List parameterTypes, JPBody body)\n        //void main(java.lang.String[])\n        // method = new SootMethod(\"main\", Arrays.asList(new Type[] {ArrayType.v(RefType.v(\"java.lang.String\"), 1)}),VoidType.v(), Modifier.PUBLIC | Modifier.STATIC);\n        // JPMethod jpMethod=new JPMethod(\"main\",parameterTypes , null);\n        //NEW METHOD FOR SOOTCLASS\n        if(methodName.equals(\"main\")){\n            jpMethod = new JPMethod(\"main\",Arrays.asList(new Type[] {ArrayType.v(RefType.v(\"java.lang.String\"), 1)}),VoidType.v(), Modifier.PUBLIC | Modifier.STATIC);\n        }\n        else{\n\n            jpMethod=new JPMethod(methodName,  parameterTypes, null);\n        }\n\n\n\n        //TODO check this and implement again\n        // locals=buildLocals(units);\n        //JPMethod method, PatchingChain<Unit> unitChain,Chain<Local> localChain\n        JPBody jpBody=new JPBody(jpMethod, units, locals);\n        jpBody.getMethod().setActiveBody(jpBody);\n        return jpBody;\n\n    }\n\n\n    public void parseCodeBlock(JSONObject block)\n    {\n        String statementType=block.get(\"ast_type\").toString();\n        switch(statementType)\n        {\n            case \"Import\":\n                //System.out.println(\"Import statement keys:\" + block.keySet());\n                //getImportStatemnt(block);\n                //allStmtASTS.add(getImportStatemnt(block));\n                units.add(getImportStatemnt(block));\n                break;\n            case \"ImportFrom\":\n                units.add(getImportFromStatemnt(block));\n                break;\n            case \"Assign\":\n                //System.out.println(\"Assign statement keys:\" + block.keySet());\n                // System.out.println(block.toString());\n                //TODO assignment currently can't handle a,b,c=1,2,3...add it..\n                AssignStmt assignStmt=getAssignStatemnt(block);\n                //This case is for type a=b=c=10 and normal assignments only, will fail for TODO above\n                //TODO tried a,b=func call; lets c..\n                int setNegLineno=0;\n                List<IExpr> targetsAll=new ArrayList<>();\n\n                for(IExpr target:assignStmt.getTargets()){\n                    if(target instanceof ListComp){\n                        targetsAll.addAll(((ListComp) target).getElts());\n                    }\n                    else{\n                        targetsAll.add(target);\n                    }\n                }\n\n                ////TODO VErify if targetsAll should be changed back to targets\n                assignStmt.setTargets(targetsAll);\n                for(IExpr target:targetsAll){\n                    Value lvalue= target;\n                    Value rvalue=assignStmt.getRHS();\n                    AssignmentStmtSoot assignmentStmtSoot;\n\n\n                    //TODO verify this, added to avoid reprint in regions ONLY\n                    if(setNegLineno>0){\n                        AssignStmt assignStmtClone=(AssignStmt)assignStmt.clone();\n                        assignStmtClone.setLineno(-10);\n                        assignmentStmtSoot=new AssignmentStmtSoot(lvalue,rvalue,assignStmtClone);\n                    }\n                    else{\n                        assignmentStmtSoot=new AssignmentStmtSoot(lvalue,rvalue,assignStmt);\n                    }\n\n                    setNegLineno++;\n                    units.add(assignmentStmtSoot);\n                    locals.addAll(assignmentStmtSoot.getLocals());\n\n                    // Chiranmoy 8-2-24: infer if the LHS is dataframe or not\n                    if(rvalue instanceof Call && (((Call) rvalue).getBaseName().equals(PythonScene.pandasAliasName) || PythonScene.allDfNames.contains(((Call) rvalue).getBaseName())))\n                        PythonScene.allDfNames.add(((Name) lvalue).getName());\n                    else if(rvalue instanceof Subscript && PythonScene.allDfNames.contains(((Subscript) rvalue).getBaseName()))\n                        PythonScene.allDfNames.add(((Name) lvalue).getName());\n                    else if(rvalue instanceof BinOp && !((BinOp) rvalue).getDataFrames().isEmpty())\n                        PythonScene.allDfNames.add(((Name) lvalue).getName());\n                }\n\n                //units.add(getAssignStatemnt(block));\n                break;\n            case \"AugAssign\":\n                AugAssignStmt augassignStmt=getAugAssignStatement(block);\n                for(IExpr target:augassignStmt.getTargets()){\n                    Value lvalue= target;\n                    Value rvalue=augassignStmt.getRHS();\n                    AssignmentStmtSoot assignmentStmtSoot=new AssignmentStmtSoot(lvalue,rvalue,augassignStmt);\n                    units.add(assignmentStmtSoot);\n\n                }\n\n                //System.out.println(statementType);\n                break;\n            case \"FunctionDef\":\n                FunctionDefStmt fds=getFuncDef(block);\n                units.add(fds);\n                //System.out.println(block.keySet());\n                //System.out.println(block.get(\"body\"));\n                //System.out.println(statementType + \" statement Not implemented\");\n                // exit(1);\n                locals.addAll(fds.getLocals());\n\n                break;\n            case \"Expr\":\n                CallExprStmt ces=getExpr(block);\n                units.add(ces);\n//                locals.addAll(ces.getLocals());\n                //System.out.println(statementType + \"\n                // statement Not implemented\");\n                //exit(1);\n                break;\n            case \"If\":\n\n                //This codeGen will break complex conditions to simple conditions and insert extra statements\n                codeGenIf(units,locals, block);\n\n                break;\n            case \"While\":\n                codeGenWhile(units,locals, block);\n                //dummy: to avoid error\n                System.out.println();\n                break;\n            case \"For\":\n                codeGenFor(units,locals, block);\n                break;\n\n            case \"ClassDef\":\n                units.add(getClassDef(block));\n\n            case \"Return\":\n                units.add(getReturnStmt(block));\n                break;\n            case \"With\":\n                codeGenWith(units,locals, block);\n                break;\n            case \"withitem\":\n                units.add(getWithItem(block));\n                break;\n            default :\n                System.out.println(statementType + \" statement Not implemented\");\n                //exit(1);\n\n                // Statements\n        }\n\n       /* for(Iterator iterator = block.keySet().iterator(); iterator.hasNext();) {\n            String key = (String) iterator.next();\n            //System.out.println(key+\",\");\n            //System.out.println(body.get(key));\n        }*/\n        //System.out.println(i+\":\"+block.get(\"ast_type\"));\n        i++;\n        //System.out.println(\"END of body\");\n\n        //TODO put analysis code here\n    }\n\n    private Unit getReturnStmt(JSONObject block) {\n        ReturnStmtParser returnStmtParser=new ReturnStmtParser(block);\n        return returnStmtParser.getReturnStmt();\n    }\n\n\n    private static ImportStmt getImportStatemnt(JSONObject block) {\n        //TODO add checks for proper Import Statement\n        //assert (xyz);\n\n        ImportStmt importStmt = null;\n        int lineno=Integer.parseInt(block.get(\"lineno\").toString());\n        int col_offset=Integer.parseInt(block.get(\"col_offset\").toString());\n        String names=block.get(\"names\").toString();\n        JSONArray childarray=(JSONArray)block.get(\"names\");\n        JSONObject aliasObj=(JSONObject) childarray.get(0);\n        Alias alias =null;\n        if(aliasObj.get(\"asname\")!=null) {\n            alias = new Alias(aliasObj.get(\"name\").toString(), aliasObj.get(\"asname\").toString(), true, InternalASTType.alias);\n        }\n        else{\n            alias=new Alias(aliasObj.get(\"name\").toString(), null, false, InternalASTType.alias);\n        }\n        importStmt=new ImportStmt(lineno,col_offset,alias, StmtAST.Import);\n        //System.out.println(importStmt);\n\n        // Chiranmoy 2-2-24: note down all external modules except pandas\n        if(!alias.getName().equals(\"pandas\")) {\n            PythonScene.imported.add(alias.getAsname() != null ? alias.getAsname() : alias.getName());\n        } else {\n            PythonScene.pandasAliasName = alias.getAsname() != null ? alias.getAsname() : alias.getName();\n        }\n\n        return importStmt;\n    }\n\n    private static AssignStmt getAssignStatemnt(JSONObject block) {\n        //TODO add checks for proper Import Statement\n        //assert (xyz);\n\n        AssignStmt assignStmt = null;\n        GetAssignmentStatementHelper getAssignmentStatementHelper=new GetAssignmentStatementHelper(block);\n        //assignStmt=\n        assignStmt=getAssignmentStatementHelper.getAssignStmt();\n        return assignStmt;\n    }\n\n    private static AugAssignStmt getAugAssignStatement(JSONObject block) {\n        //TODO add checks for proper Import Statement\n        //assert (xyz);\n\n        AugAssignStmt assignStmt = null;\n        GetAugAssignmentStatementHelper getAugAssignmentStatementHelper=new GetAugAssignmentStatementHelper(block);\n        //assignStmt=\n        assignStmt=getAugAssignmentStatementHelper.getAugAssignStmt();\n        return assignStmt;\n    }\n\n\n    private static CallExprStmt getExpr(JSONObject block) {\n        //TODO move this logic to GetExpr class if getting complicated here\n        //System.out.println(\"Printing expression\");\n        //System.out.println(block.toString());\n        JSONObject exprValueObj=(JSONObject) block.get(\"value\");\n        String exprType=exprValueObj.get(\"ast_type\").toString();\n        if(exprType.equals(\"Call\")){\n                GetCall getCall=new GetCall();\n                Call call=getCall.GetFunctionalCall(exprValueObj);\n                CallExprStmt callExprStmt =new CallExprStmt();\n                callExprStmt.setCallExpr(call);\n                callExprStmt.setLineno(call.getLineno());\n                return callExprStmt;\n        } else if(exprType.equals(\"BinOp\")){\n            BinOpParser binOpParser=new BinOpParser(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(binOpParser.getBinOp());\n            callExprStmt.setLineno(binOpParser.getBinOp().getLineno());\n            return callExprStmt;\n        }\n        else if(exprType.equals(\"Name\")){\n            GenericExpressionParser gep=new GenericExpressionParser();\n            IExpr name =gep.getName(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(name);\n            callExprStmt.setLineno(((Name)name).getLineno());\n            return callExprStmt;\n        }\n        else if(exprType.equals(\"Constant\")){\n            GenericExpressionParser gep=new GenericExpressionParser();\n            IExpr constant =gep.getConstant(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(constant);\n            callExprStmt.setLineno(((Constant)constant).getLineno());\n            return callExprStmt;\n        }\n        else if(exprType.equals(\"Subscript\")){\n            SubscriptParser ssp=new SubscriptParser();\n            IExpr subscript =ssp.parseSubscript(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(subscript);\n            callExprStmt.setLineno(((Subscript)subscript).getLineno());\n            return callExprStmt;\n        }\n        else if(exprType.equals(\"Str\")){\n            GenericExpressionParser gep=new GenericExpressionParser();\n            IExpr str =gep.getStr(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(str);\n            callExprStmt.setLineno(((Str)str).getLineno());\n            return callExprStmt;\n        }\n        //TODO refractor\n        else if(exprType.equals(\"Num\") ){\n\n            GenericExpressionParser gep=new GenericExpressionParser();\n            IExpr num =gep.getNumber(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(num);\n            callExprStmt.setLineno(((Num)num).getLineno());\n            return callExprStmt;\n        }\n\n        else if(exprType.equals(\"Attribute\")){\n            AttributeParser ap=new AttributeParser();\n            IExpr att =ap.parseAttribute(exprValueObj);\n            CallExprStmt callExprStmt =new CallExprStmt();\n            callExprStmt.setCallExpr(att);\n            callExprStmt.setLineno(((Attribute)att).getLineno());\n            return callExprStmt;\n        }\n        else{\n            System.out.println(exprType+ \" still Not implemented in IR Parser for CallExpr for getExpr Method, Source Line no\");\n            exit(1);\n        }\n\n       // CallExprStmt callExprStmt =new CallExprStmt();\n        //Should never reach here\n        return null;\n\n    }\n\n    private static CallExprStmt getWithItem(JSONObject block) {\n        //TODO move this logic to GetExpr class if getting complicated here\n        //System.out.println(\"Printing expression\");\n        //System.out.println(block.toString());\n        JSONObject exprValueObj=(JSONObject) block.get(\"context_expr\");\n        String exprType=exprValueObj.get(\"ast_type\").toString();\n        switch(exprType) {\n            case \"Call\":\n                GetCall getCall=new GetCall();\n                Call call=getCall.GetFunctionalCall(exprValueObj);\n                CallExprStmt callExprStmt =new CallExprStmt();\n                callExprStmt.setCallExpr(call);\n                return callExprStmt;\n        }\n\n        CallExprStmt callExprStmt =new CallExprStmt();\n        //Should never reach here\n        return callExprStmt;\n\n    }\n\n\n    private static FunctionDefStmt getFuncDef(JSONObject block) {\n        FuncDefParser funcDefParser=new FuncDefParser(block);\n        return funcDefParser.getFuncDef();\n    }\n\n\n    private Unit getIfStmt(JSONObject block) {\n        IfStmtParser ifStmtParser=new IfStmtParser(block);\n        //IfStmt ifStmt=ifStmtParser.getIfStmt();\n        IfStmtPy ifStmtPy=ifStmtParser.getIfStmt();\n        return ifStmtPy;\n\n    }\n\n    private Unit getForStmt(JSONObject block) {\n        ForStmtParser forStmtParser=new ForStmtParser(block);\n        ForStmtPy forStmtPy =forStmtParser.getForStmtPy();\n        return forStmtPy;\n\n    }\n    private Unit getWithStmt(JSONObject block) {\n        WithStmtParser withStmtParser=new WithStmtParser(block);\n        WithStmtPy withStmtPy =withStmtParser.getWithStmtPy();\n        return withStmtPy;\n\n    }\n\n    private static ClassDefStmt getClassDef(JSONObject block) {\n        ClassDefParser classDefParser=new ClassDefParser(block);\n        return classDefParser.getClassDefStmt();\n    }\n\n    private void codeGenIf(PatchingChain units, Chain locals, JSONObject block){\n        //TODO break complex if conditions to simple condtions\n        //TODO create new if statement with simple test\n        //TODO align inserts of nop etc properly\n        Unit ifStmtPy=getIfStmt(block);\n        //units.add(ifStmt);\n        codeGenCommon(units,locals, (IfStmtPy) ifStmtPy, false);\n\n    }\n    private void codeGenWhile(PatchingChain units, Chain locals, JSONObject block){\n        //TODO break complex if conditions to simple condtions\n        //TODO create new if statement with simple test\n        //TODO align inserts of nop etc properly\n        Unit ifStmtPy=getIfStmt(block);\n        //units.add(ifStmt);\n        codeGenCommon(units,locals, (IfStmtPy) ifStmtPy, true);\n\n    }\n    private void codeGenFor(PatchingChain units,Chain locals, JSONObject block){\n        //TODO break complex if conditions to simple condtions\n        //TODO create new if statement with simple test\n        //TODO align inserts of nop etc properly\n        Unit forStmtPy=getForStmt(block);\n        SimplifiedFor simplifiedFor=new SimplifiedFor();\n        PatchingChain<Unit> extendedForUnits=simplifiedFor.getSimplifiedFor((ForStmtPy)forStmtPy, locals);\n        for(Unit unit:extendedForUnits){\n            units.add(unit);\n        }\n        locals.addAll(((ForStmtPy) forStmtPy).getBody().getLocals());\n\n//        codeGenCommon(units,(IfStmtPy) ifStmtPy, false);\n\n    }\n    private void codeGenWith(PatchingChain units,  Chain locals, JSONObject block){\n\n        Unit withStmtPy=getWithStmt(block);\n        SimplifiedWith simplifiedWith=new SimplifiedWith();\n        PatchingChain<Unit> extendedForUnits=simplifiedWith.getSimplifiedWith((WithStmtPy)withStmtPy,block);\n        for(Unit unit:extendedForUnits){\n            units.add(unit);\n        }\n        locals.addAll(((WithStmtPy) withStmtPy).getBody().getLocals());\n\n\n\n    }\n    private void codeGenCommon(PatchingChain units, Chain locals, IfStmtPy ifStmtPy, boolean whileBoolean){\n        SimplifiedIf simplifiedIf=new SimplifiedIf();\n        PatchingChain<Unit> extendedIfUnits=simplifiedIf.getSimplifiedIf(ifStmtPy,whileBoolean, locals);\n        for(Unit unit:extendedIfUnits){\n            units.add(unit);\n        }\n        locals.addAll(ifStmtPy.getIfBody().getLocals());\n        locals.addAll(ifStmtPy.getOrelseBody().getLocals());\n    }\n\n//    private Unit createJimpleIfStmt(IfStmt ifStmt){\n//\n//        NopStmt nop = Jimple.v().newNop(); // create nop so that we have a temporary label to jump to\n//\n//        NopStmt nop=Jimple.v().newNopStmt();\n//        IfStmt ifSt = Jimple.v().newIfStmt(ifStmt.getCondition(), nop);\n//\n//\n//    }\n\n\n\n    public void TestChains() {\n        Chain<Unit> unitChain = units;\n\n\n        for(Unit unit : unitChain) {\n\n            List valueBoxes = unit.getUseAndDefBoxes();\n            System.out.println(valueBoxes.size());\n            for(Object obj : valueBoxes) {\n                assert obj instanceof ValueBox;\n                ValueBox valueBox = (ValueBox) obj;\n                Value value = valueBox.getValue();\n                System.out.println(value.toString());\n            }\n\n        }\n    }\n\n    public HashMap<Integer, String> getSourceMap() {\n        return sourceMap;\n    }\n\n    public void setSourceMap(HashMap<Integer, String> sourceMap) {\n        this.sourceMap = sourceMap;\n    }\n    public String getSourceFile() {\n        return sourceFile;\n    }\n\n    public void setSourceFile(String sourceFile) {\n        this.sourceFile = sourceFile;\n    }\n\n    public Chain<Local> getIRLocals(){\n        return this.locals;\n    }\n    //TODO Verify this code, this is not used anymore....\n    public Chain<Local> buildLocals(PatchingChain<Unit> units){\n        Chain<Local> locals = new  HashChain<Local>();\n        Iterator unitIterator =units.iterator();\n        while(unitIterator.hasNext()){\n            Unit unit=(Unit)unitIterator.next();\n            System.out.println(\"Unit type is:\"+unit.getClass());\n            List<ValueBox> useAndDefBoxes=unit.getUseAndDefBoxes();\n            Iterator boxIt=useAndDefBoxes.iterator();\n            while(boxIt.hasNext()){\n                ValueBox box=(ValueBox) boxIt.next();\n                if(box instanceof JPValueBox){\n                    System.out.println(\"JPVAlueBox\");\n                }\n                Value val=box.getValue();\n                System.out.println(\"value is:\"+val);\n                if(val instanceof  Local){\n                    locals.add((Local)val);\n                    System.out.println(\"Local                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          value is:\"+val);\n\n                }\n                else if(val instanceof Call){\n\n                }\n\n            }\n        }\n\n        return locals;\n    }\n    private static ImportFrom getImportFromStatemnt(JSONObject block) {\n        //TODO add checks for proper Import Statement\n        //assert (xyz);\n\n        ImportFrom importFromStmt = null;\n        int lineno=Integer.parseInt(block.get(\"lineno\").toString());\n        int col_offset=Integer.parseInt(block.get(\"col_offset\").toString());\n        String names=block.get(\"names\").toString();\n        String module=block.get(\"module\").toString();\n        JSONArray childarray=(JSONArray)block.get(\"names\");\n        JSONObject aliasObj=(JSONObject) childarray.get(0);\n        Alias alias =null;\n        if(aliasObj.get(\"asname\")!=null) {\n            alias = new Alias(aliasObj.get(\"name\").toString(), aliasObj.get(\"asname\").toString(), true, InternalASTType.alias);\n        }\n        else{\n            alias=new Alias(aliasObj.get(\"name\").toString(), null, false, InternalASTType.alias);\n        }\n        importFromStmt=new ImportFrom(lineno,col_offset,alias, StmtAST.ImportFrom,module);\n        //System.out.println(importStmt);\n\n        // Chiranmoy 2-2-24: note down all external modules\n        PythonScene.imported.add(alias.getAsname() != null ? alias.getAsname() : alias.getName());\n\n        return importFromStmt;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/parse/IRParser.java b/parsePythonIR/src/parse/IRParser.java
+--- a/parsePythonIR/src/parse/IRParser.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/parse/IRParser.java	(date 1710332649350)
+@@ -10,6 +10,7 @@
+ import ir.internalast.Alias;
+ import ir.internalast.InternalASTType;
+ import ir.internalast.JPValueBox;
++import org.jboss.util.NotImplementedException;
+ import org.json.simple.JSONArray;
+ import org.json.simple.JSONObject;
+ import soot.*;
+@@ -129,12 +130,20 @@
+                     locals.addAll(assignmentStmtSoot.getLocals());
+ 
+                     // Chiranmoy 8-2-24: infer if the LHS is dataframe or not
+-                    if(rvalue instanceof Call && (((Call) rvalue).getBaseName().equals(PythonScene.pandasAliasName) || PythonScene.allDfNames.contains(((Call) rvalue).getBaseName())))
+-                        PythonScene.allDfNames.add(((Name) lvalue).getName());
+-                    else if(rvalue instanceof Subscript && PythonScene.allDfNames.contains(((Subscript) rvalue).getBaseName()))
+-                        PythonScene.allDfNames.add(((Name) lvalue).getName());
+-                    else if(rvalue instanceof BinOp && !((BinOp) rvalue).getDataFrames().isEmpty())
+-                        PythonScene.allDfNames.add(((Name) lvalue).getName());
++                    boolean callDfOp = rvalue instanceof Call && (((Call) rvalue).getBaseName().equals(PythonScene.pandasAliasName) || PythonScene.allDfNames.contains(((Call) rvalue).getBaseName()));
++                    boolean subscriptDfOp = rvalue instanceof Subscript && PythonScene.allDfNames.contains(((Subscript) rvalue).getBaseName());
++                    boolean binDfOp = rvalue instanceof BinOp && !((BinOp) rvalue).getDataFrames().isEmpty();
++                    boolean attrDfOp = rvalue instanceof Attribute && PythonScene.allDfNames.contains(((Attribute) rvalue).getBaseName());
++
++                    if(callDfOp || subscriptDfOp || attrDfOp || binDfOp) {
++                        if(lvalue instanceof Name)
++                            PythonScene.allDfNames.add(((Name) lvalue).getName());
++                        else if(lvalue instanceof Subscript)
++                            PythonScene.allDfNames.add(((Subscript) lvalue).getBaseName());
++//                            continue;
++                        else
++                            throw new NotImplementedException("Not Implemented in " + this.getClass().getSimpleName());
++                    }
+                 }
+ 
+                 //units.add(getAssignStatemnt(block));
+Index: parsePythonIR/src/ir/Stmt/IfStmt.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.Stmt;\n\nimport ast.StmtAST;\nimport ir.IExpr;\nimport ir.IStmt;\nimport ir.JPBody;\nimport ir.expr.Name;\nimport org.jboss.util.NotImplementedException;\nimport soot.*;\nimport soot.jimple.internal.JIfStmt;\n\nimport java.util.ArrayList;\nimport java.util.List;\n\npublic class IfStmt  extends JIfStmt implements IStmt { //extends JPAbstractStmt{//\n    StmtAST ast_type= StmtAST.If;\n    IExpr test;\n    JPBody ifBody;\n    JPBody orelseBody;\n    Unit pyStmt=null;\n    String typePyStmt;\n    int lineno=0;\n    boolean modified=false;\n    Value condition;\n\n\n    public IfStmt(Value condition, Unit target) {\n        super(condition, target);\n        assert (condition != null);\n        this.condition=condition;\n\n    }\n\n    public IfStmt(Value condition, UnitBox target) {\n        super(condition, target);\n        assert (condition != null);\n        this.condition=condition;\n    }\n\n    protected IfStmt(ValueBox conditionBox, UnitBox targetBox) {\n        super(conditionBox, targetBox);\n        assert (conditionBox != null);\n    }\n\n    public StmtAST getAst_type() {\n        return ast_type;\n    }\n\n    public void setAst_type(StmtAST ast_type) {\n        this.ast_type = ast_type;\n    }\n\n    public IExpr getTest() {\n        return test;\n    }\n\n    public void setTest(IExpr test) {\n        this.test = test;\n    }\n\n    public JPBody getIfBody() {\n        return ifBody;\n    }\n\n    public void setIfBody(JPBody ifBody) {\n        this.ifBody = ifBody;\n    }\n\n    public JPBody getOrelseBody() {\n        return orelseBody;\n    }\n\n    public void setOrelseBody(JPBody orelseBody) {\n        this.orelseBody = orelseBody;\n    }\n\n    public void copyIf(IfStmtPy ifStmtPy) {\n        this.setTest(ifStmtPy.getTest());\n        this.setIfBody(ifStmtPy.getIfBody());\n        this.setOrelseBody(ifStmtPy.getOrelseBody());\n\n    }\n\n    public Unit getPyStmt() {\n        return pyStmt;\n    }\n\n    public void setPyStmt(Unit pyStmt) {\n        this.pyStmt = pyStmt;\n    }\n\n    public String getTypePyStmt() {\n        return typePyStmt;\n    }\n\n    public void setTypePyStmt(String typePyStmt) {\n        this.typePyStmt = typePyStmt;\n    }\n\n    public void setLineno(int lineno) {\n        this.lineno = lineno;\n    }\n\n    public void setModified(boolean modified) {\n        this.modified = modified;\n    }\n\n    public String toString() {\n\n\n        return (pyStmt.toString());\n    }\n\n    @Override\n    //TODO write lineno\n    public int getLineno() {\n        return lineno;\n    }\n\n    @Override\n    public boolean isModified() {\n        return modified;\n    }\n    String sourceCode=\"\";\n    public void setSourceCode(String sourceCode) {\n        this.sourceCode = sourceCode;\n    }\n    @Override\n    public String getOriginalSource() {\n        return sourceCode;\n    }\n\n    @Override\n    public Object clone() {\n        return this;\n        //ERROR FOR FORSTMT--rectify\n        /*\n        NopStmt nop= new ir.Stmt.NopStmt();//Jimple.v().newNopStmt();\n        IfStmt ifStmt=new IfStmt(condition,nop);\n        IfStmtPy ifStmtPy=(IfStmtPy)pyStmt.clone();\n        ifStmt.copyIf(ifStmtPy);\n        ifStmt.setPyStmt(ifStmtPy);\n        ifStmt.setLineno(lineno);\n        ifStmt.setTypePyStmt(typePyStmt);\n        ifStmt.setSourceCode(sourceCode);\n        return ifStmt;\n    */\n    }\n    public List<Local> getLocals(){\n        List<Local> listL=new ArrayList<>();\n        if(test!=null)\n        listL.addAll(test.getLocals());\n        return listL;\n    }\n\n    @Override\n    public List<Name> getDataFramesDefined() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesDefined not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n\n    @Override\n    public List<Name> getDataFramesUsed() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesUsed not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/Stmt/IfStmt.java b/parsePythonIR/src/ir/Stmt/IfStmt.java
+--- a/parsePythonIR/src/ir/Stmt/IfStmt.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/Stmt/IfStmt.java	(date 1710188552934)
+@@ -156,16 +156,20 @@
+     @Override
+     public List<Name> getDataFramesDefined() {
+         List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesDefined not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
+-    }
++        if(typePyStmt.equals("for")) {
++            return dataframes;
++        }
+ 
++        throw new NotImplementedException("getDataFramesDefined not implemented in " + this.getClass().getSimpleName());
++    }
++
+     @Override
+     public List<Name> getDataFramesUsed() {
+         List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesUsed not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
++        if(typePyStmt.equals("for")) {
++            return dataframes;
++        }
++
++        throw new NotImplementedException("getDataFramesDefined not implemented in " + this.getClass().getSimpleName());
+     }
+ }
+Index: parsePythonIR/src/ir/Stmt/GotoStmt.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.Stmt;\n\nimport ir.IStmt;\nimport ir.expr.Name;\nimport org.jboss.util.NotImplementedException;\nimport soot.Unit;\nimport soot.jimple.internal.JGotoStmt;\n\nimport java.util.ArrayList;\nimport java.util.List;\n\npublic class GotoStmt extends JGotoStmt implements IStmt {\n\n    public GotoStmt(Unit target) {\n        super(target);\n    }\n\n    @Override\n    public String toString(){\n        return null;\n    }\n\n    @Override\n    public int getLineno() {\n        return -1;\n    }\n\n    @Override\n    public boolean isModified() {\n        return false;\n    }\n    @Override\n    public String getOriginalSource() {\n        return null;\n    }\n\n    @Override\n    public Object clone() {\n        return this;\n    }\n\n    @Override\n    public List<Name> getDataFramesDefined() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesDefined not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n\n    @Override\n    public List<Name> getDataFramesUsed() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesUsed not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/Stmt/GotoStmt.java b/parsePythonIR/src/ir/Stmt/GotoStmt.java
+--- a/parsePythonIR/src/ir/Stmt/GotoStmt.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/Stmt/GotoStmt.java	(date 1710187069958)
+@@ -41,17 +41,11 @@
+ 
+     @Override
+     public List<Name> getDataFramesDefined() {
+-        List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesDefined not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
++        return new ArrayList<>();
+     }
+ 
+     @Override
+     public List<Name> getDataFramesUsed() {
+-        List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesUsed not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
++        return new ArrayList<>();
+     }
+ }
+Index: parsePythonIR/src/ir/expr/Call.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.expr;\n\nimport ast.ExprAST;\nimport ir.IExpr;\nimport ir.JPExpr;\nimport ir.internalast.Keyword;\nimport ir.util.CRegion;\nimport soot.Local;\nimport soot.Value;\nimport soot.ValueBox;\nimport soot.jimple.ConditionExpr;\n\nimport java.util.ArrayList;\nimport java.util.List;\n\npublic class Call extends JPExpr implements CRegion, ConditionExpr {\n    List<IExpr> args=new ArrayList<>();\n    ExprAST ast_type=ExprAST.Call;\n    int col_offset;\n    int lineno;\n    //TODO add details of func here\n    IExpr func;\n    List<Keyword> keywords=new ArrayList<>();\n\n    String baseName; // Chiranmoy 8-2-24: plt in plt.plot(...)\n\n    public boolean isDataFrameOperation = false;\n\n    //TODO: added for subscripted calls -check the best way to do this\n\n\n    //GETTERS AND SETTERS\n\n\n    public List<IExpr> getArgs() {\n        return args;\n    }\n\n    public void setArgs(List<IExpr> args) {\n        this.args = args;\n    }\n\n    public ExprAST getAst_type() {\n        return ast_type;\n    }\n\n    public void setAst_type(ExprAST ast_type) {\n        this.ast_type = ast_type;\n    }\n\n    public int getCol_offset() {\n        return col_offset;\n    }\n\n    public void setCol_offset(int col_offset) {\n        this.col_offset = col_offset;\n    }\n\n    public IExpr getFunc() {\n        return func;\n    }\n\n    public void setFunc(IExpr func) {\n        this.func = func;\n    }\n\n    public List<Keyword> getKeywords() {\n        return keywords;\n    }\n\n    public void setKeywords(List keywords) {\n        this.keywords = keywords;\n    }\n\n    public int getLineno() {\n        return lineno;\n    }\n\n    public void setLineno(int lineno) {\n        this.lineno = lineno;\n    }\n\n\n    @Override\n    public String toString() {\n        //TODO implement properly toString of call\n\n        String stmt=func.toString();\n        if(args==null || args.size()==0) {\n            stmt = stmt + \"(\";\n        }\n        else{\n            stmt=stmt+\"(\";\n            for(IExpr iExpr:args){\n                stmt=stmt+iExpr.toString()+ \",\";\n                //3.01\n//                if(iExpr instanceof Constant) {\n//                    stmt = stmt + \"'\"+ iExpr.toString() + \"',\";\n//                }\n//                else{\n//                    stmt = stmt + iExpr.toString() + \",\";\n//                }\n            }\n            //to remove extra comma\n            stmt=stmt.substring(0,stmt.length()-1);\n\n\n\n        }\n        if(keywords.size()>0){\n            if(!(args==null || args.size()==0)){\n                stmt=stmt+\",\";\n            }\n\n            for(Keyword keyword: keywords){\n                //stmt=stmt+keyword.getArg()+\"=\"+keyword.getValue().toString()+\",\";\n                stmt=stmt+keyword.getArg()+\"=\";\n                //3.01\n//                if(keyword.getValue() instanceof Constant  && !keyword.getValue().toString().equals(\"False\")){\n//                    stmt=stmt+\"'\"+keyword.getValue().toString() + \"',\";\n//                }\n//                else {\n//                    stmt=stmt+keyword.getValue().toString() + \",\";\n//                }\n                stmt=stmt+keyword.getValue().toString() + \",\";\n            }\n            //to remove extra comma\n            stmt=stmt.substring(0,stmt.length()-1);\n\n        }\n        stmt=stmt+\")\";\n\n        return stmt;\n\n    }\n\n    @Override\n    public Object clone() {\n    Call call=new Call();\n    call.setLineno(this.lineno);\n    call.setCol_offset(this.col_offset);\n    call.setFunc((IExpr)this.func.clone());\n    for(Keyword keyword:this.keywords){\n        call.keywords.add((Keyword)keyword.clone());\n    }\n    for(IExpr arg:this.args){\n        call.args.add((IExpr) arg.clone());\n    }\n    return call;\n    }\n\n    //START CONDITION***********************************************************************************\n    //**************************************************************************************************\n    @Override\n    public Value getOp1() {\n        return this.args.get(0);\n    }\n\n    @Override\n    public Value getOp2() {\n        return this.args.get(1);\n    }\n\n    @Override\n    public ValueBox getOp1Box() {\n        return null;\n    }\n\n    @Override\n    public ValueBox getOp2Box() {\n        return null;\n    }\n\n    @Override\n    public void setOp1(Value value) {\n\n    }\n\n    @Override\n    public void setOp2(Value value) {\n\n    }\n\n    @Override\n    public String getSymbol() {\n        return null;\n    }\n    //END CONDITION***********************************************************************************\n    //    //**************************************************************************************************\n\n    @Override\n    public List<Local> getLocals() {\n        List<Local> listL=new ArrayList<>();\n        for(Object val:keywords) {\n            if (val instanceof IExpr){\n                listL.addAll(((IExpr)val).getLocals());\n            }\n        }\n        for(Object val:args) {\n            if (val instanceof IExpr){\n                listL.addAll(((IExpr)val).getLocals());\n            }\n        }\n         listL.addAll(func.getLocals());\n        return listL;\n    }\n\n    @Override\n    public List<Name> getDataFrames() {\n        List<Name> dataframes = new ArrayList<>(func.getDataFrames());\n        for(IExpr expr : args)\n            dataframes.addAll(expr.getDataFrames());\n        for(Keyword kwarg : keywords)\n            dataframes.addAll(kwarg.getDataFrames());\n        return dataframes;\n    }\n\n    public String getBaseName() {\n        return baseName;\n    }\n\n    public void setBaseName(String baseName) {\n        this.baseName = baseName;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/expr/Call.java b/parsePythonIR/src/ir/expr/Call.java
+--- a/parsePythonIR/src/ir/expr/Call.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/expr/Call.java	(date 1710164303958)
+@@ -24,8 +24,6 @@
+ 
+     String baseName; // Chiranmoy 8-2-24: plt in plt.plot(...)
+ 
+-    public boolean isDataFrameOperation = false;
+-
+     //TODO: added for subscripted calls -check the best way to do this
+ 
+ 
+Index: parsePythonIR/src/ir/internalast/Keyword.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.internalast;\n\nimport ir.IExpr;\nimport ir.JPExpr;\nimport ir.expr.Constant;\nimport ir.expr.Name;\nimport soot.Local;\n\nimport java.util.List;\n\npublic class Keyword extends JPExpr {\n    String arg;\n    IExpr value;\n\n    public String getArg() {\n        return arg;\n    }\n\n    public void setArg(String arg) {\n        this.arg = arg;\n    }\n\n    public IExpr getValue() {\n        return value;\n    }\n\n    public void setValue(IExpr value) {\n        this.value = value;\n        //3.9 False is read as false by ast\n        if(this.value instanceof Constant && this.value.toString().equals(\"false\")){\n            Constant val=(Constant)value;\n            val.setValue(\"False\");\n        }\n//        //2.01\n//        else if(value instanceof Constant){\n//                Constant val=(Constant)value;\n//                val.setValue(\"'\"+val.getValue()+\"'\");\n//        }\n    }\n    @Override\n    public List<Local> getLocals() {\n        return value.getLocals();\n    }\n\n    @Override\n    public Object clone() {\n        Keyword keyword = new Keyword();\n        keyword.arg = this.arg;\n        keyword.value = (IExpr)this.value.clone();\n        return keyword;\n    }\n\n    @Override\n    public List<Name> getDataFrames() {\n        return value.getDataFrames();\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/internalast/Keyword.java b/parsePythonIR/src/ir/internalast/Keyword.java
+--- a/parsePythonIR/src/ir/internalast/Keyword.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/internalast/Keyword.java	(date 1710190461739)
+@@ -12,6 +12,13 @@
+     String arg;
+     IExpr value;
+ 
++    public Keyword() {}
++
++    public Keyword(String arg, IExpr value) {
++        this.arg = arg;
++        this.value = value;
++    }
++
+     public String getArg() {
+         return arg;
+     }
+Index: parsePythonIR/src/ir/Stmt/NopStmt.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package ir.Stmt;\n\nimport ir.IStmt;\nimport ir.expr.Name;\nimport org.jboss.util.NotImplementedException;\nimport soot.jimple.internal.JNopStmt;\n\nimport java.util.ArrayList;\nimport java.util.List;\n\npublic class NopStmt extends JNopStmt implements IStmt {\n    public NopStmt(){\n        super();\n    }\n    @Override\n    public String toString(){\n        return null;\n    }\n\n    @Override\n    public int getLineno() {\n        return -1;\n    }\n\n    @Override\n    public boolean isModified() {\n        return false;\n    }\n    @Override\n    public String getOriginalSource() {\n        return null;\n    }\n    @Override\n    public boolean equals(Object compare) {\n       return super.equals(compare);\n    }\n    @Override\n    public Object clone() {\n        return this;\n    }\n\n    @Override\n    public List<Name> getDataFramesDefined() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesDefined not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n\n    @Override\n    public List<Name> getDataFramesUsed() {\n        List<Name> dataframes = new ArrayList<>();\n        if(dataframes.isEmpty())\n            throw new NotImplementedException(\"getDataFramesUsed not implemented in \" + this.getClass().getSimpleName());\n        return dataframes;\n    }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/parsePythonIR/src/ir/Stmt/NopStmt.java b/parsePythonIR/src/ir/Stmt/NopStmt.java
+--- a/parsePythonIR/src/ir/Stmt/NopStmt.java	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/parsePythonIR/src/ir/Stmt/NopStmt.java	(date 1710187043095)
+@@ -41,17 +41,11 @@
+ 
+     @Override
+     public List<Name> getDataFramesDefined() {
+-        List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesDefined not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
++        return new ArrayList<>();
+     }
+ 
+     @Override
+     public List<Name> getDataFramesUsed() {
+-        List<Name> dataframes = new ArrayList<>();
+-        if(dataframes.isEmpty())
+-            throw new NotImplementedException("getDataFramesUsed not implemented in " + this.getClass().getSimpleName());
+-        return dataframes;
++        return new ArrayList<>();
+     }
+ }
+Index: temp.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>{\n    \"ast_type\": \"Module\",\n    \"body\": [\n        {\n            \"ast_type\": \"Import\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 19,\n            \"end_lineno\": 1,\n            \"lineno\": 1,\n            \"names\": [\n                {\n                    \"asname\": \"pd\",\n                    \"ast_type\": \"alias\",\n                    \"col_offset\": 7,\n                    \"end_col_offset\": 19,\n                    \"end_lineno\": 1,\n                    \"lineno\": 1,\n                    \"name\": \"pandas\"\n                }\n            ]\n        },\n        {\n            \"ast_type\": \"Import\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 31,\n            \"end_lineno\": 2,\n            \"lineno\": 2,\n            \"names\": [\n                {\n                    \"asname\": \"plt\",\n                    \"ast_type\": \"alias\",\n                    \"col_offset\": 7,\n                    \"end_col_offset\": 31,\n                    \"end_lineno\": 2,\n                    \"lineno\": 2,\n                    \"name\": \"matplotlib.pyplot\"\n                }\n            ]\n        },\n        {\n            \"ast_type\": \"Assign\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 119,\n            \"end_lineno\": 4,\n            \"lineno\": 4,\n            \"targets\": [\n                {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Store\"\n                    },\n                    \"end_col_offset\": 2,\n                    \"end_lineno\": 4,\n                    \"id\": \"df\",\n                    \"lineno\": 4\n                }\n            ],\n            \"type_comment\": null,\n            \"value\": {\n                \"args\": [\n                    {\n                        \"ast_type\": \"Constant\",\n                        \"col_offset\": 17,\n                        \"end_col_offset\": 80,\n                        \"end_lineno\": 4,\n                        \"kind\": null,\n                        \"lineno\": 4,\n                        \"value\": \"/home/chiranmoy/IdeaProjects/data/yellow_tripdata_2015-01.csv\"\n                    }\n                ],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 5,\n                \"end_col_offset\": 119,\n                \"end_lineno\": 4,\n                \"func\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"read_csv\",\n                    \"col_offset\": 5,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 16,\n                    \"end_lineno\": 4,\n                    \"lineno\": 4,\n                    \"value\": {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 5,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 7,\n                        \"end_lineno\": 4,\n                        \"id\": \"pd\",\n                        \"lineno\": 4\n                    }\n                },\n                \"keywords\": [\n                    {\n                        \"arg\": \"parse_dates\",\n                        \"ast_type\": \"keyword\",\n                        \"col_offset\": 82,\n                        \"end_col_offset\": 118,\n                        \"end_lineno\": 4,\n                        \"lineno\": 4,\n                        \"value\": {\n                            \"ast_type\": \"List\",\n                            \"col_offset\": 94,\n                            \"ctx\": {\n                                \"ast_type\": \"Load\"\n                            },\n                            \"elts\": [\n                                {\n                                    \"ast_type\": \"Constant\",\n                                    \"col_offset\": 95,\n                                    \"end_col_offset\": 117,\n                                    \"end_lineno\": 4,\n                                    \"kind\": null,\n                                    \"lineno\": 4,\n                                    \"value\": \"tpep_pickup_datetime\"\n                                }\n                            ],\n                            \"end_col_offset\": 118,\n                            \"end_lineno\": 4,\n                            \"lineno\": 4\n                        }\n                    }\n                ],\n                \"lineno\": 4\n            }\n        },\n        {\n            \"ast_type\": \"Assign\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 29,\n            \"end_lineno\": 5,\n            \"lineno\": 5,\n            \"targets\": [\n                {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Store\"\n                    },\n                    \"end_col_offset\": 2,\n                    \"end_lineno\": 5,\n                    \"id\": \"df\",\n                    \"lineno\": 5\n                }\n            ],\n            \"type_comment\": null,\n            \"value\": {\n                \"ast_type\": \"Subscript\",\n                \"col_offset\": 5,\n                \"ctx\": {\n                    \"ast_type\": \"Load\"\n                },\n                \"end_col_offset\": 29,\n                \"end_lineno\": 5,\n                \"lineno\": 5,\n                \"slice\": {\n                    \"ast_type\": \"Compare\",\n                    \"col_offset\": 9,\n                    \"comparators\": [\n                        {\n                            \"ast_type\": \"Constant\",\n                            \"col_offset\": 26,\n                            \"end_col_offset\": 27,\n                            \"end_lineno\": 5,\n                            \"kind\": null,\n                            \"lineno\": 5,\n                            \"value\": 0\n                        }\n                    ],\n                    \"end_col_offset\": 27,\n                    \"end_lineno\": 5,\n                    \"left\": {\n                        \"ast_type\": \"Attribute\",\n                        \"attr\": \"fare_amount\",\n                        \"col_offset\": 9,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 23,\n                        \"end_lineno\": 5,\n                        \"lineno\": 5,\n                        \"value\": {\n                            \"ast_type\": \"Name\",\n                            \"col_offset\": 9,\n                            \"ctx\": {\n                                \"ast_type\": \"Load\"\n                            },\n                            \"end_col_offset\": 11,\n                            \"end_lineno\": 5,\n                            \"id\": \"df\",\n                            \"lineno\": 5\n                        }\n                    },\n                    \"lineno\": 5,\n                    \"ops\": [\n                        {\n                            \"ast_type\": \"Gt\"\n                        }\n                    ]\n                },\n                \"value\": {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 5,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 7,\n                    \"end_lineno\": 5,\n                    \"id\": \"df\",\n                    \"lineno\": 5\n                }\n            }\n        },\n        {\n            \"ast_type\": \"Assign\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 48,\n            \"end_lineno\": 6,\n            \"lineno\": 6,\n            \"targets\": [\n                {\n                    \"ast_type\": \"Subscript\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Store\"\n                    },\n                    \"end_col_offset\": 9,\n                    \"end_lineno\": 6,\n                    \"lineno\": 6,\n                    \"slice\": {\n                        \"ast_type\": \"Constant\",\n                        \"col_offset\": 3,\n                        \"end_col_offset\": 8,\n                        \"end_lineno\": 6,\n                        \"kind\": null,\n                        \"lineno\": 6,\n                        \"value\": \"day\"\n                    },\n                    \"value\": {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 0,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 2,\n                        \"end_lineno\": 6,\n                        \"id\": \"df\",\n                        \"lineno\": 6\n                    }\n                }\n            ],\n            \"type_comment\": null,\n            \"value\": {\n                \"ast_type\": \"Attribute\",\n                \"attr\": \"dayofweek\",\n                \"col_offset\": 12,\n                \"ctx\": {\n                    \"ast_type\": \"Load\"\n                },\n                \"end_col_offset\": 48,\n                \"end_lineno\": 6,\n                \"lineno\": 6,\n                \"value\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"dt\",\n                    \"col_offset\": 12,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 38,\n                    \"end_lineno\": 6,\n                    \"lineno\": 6,\n                    \"value\": {\n                        \"ast_type\": \"Attribute\",\n                        \"attr\": \"tpep_pickup_datetime\",\n                        \"col_offset\": 12,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 35,\n                        \"end_lineno\": 6,\n                        \"lineno\": 6,\n                        \"value\": {\n                            \"ast_type\": \"Name\",\n                            \"col_offset\": 12,\n                            \"ctx\": {\n                                \"ast_type\": \"Load\"\n                            },\n                            \"end_col_offset\": 14,\n                            \"end_lineno\": 6,\n                            \"id\": \"df\",\n                            \"lineno\": 6\n                        }\n                    }\n                }\n            }\n        },\n        {\n            \"ast_type\": \"Assign\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 65,\n            \"end_lineno\": 8,\n            \"lineno\": 8,\n            \"targets\": [\n                {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Store\"\n                    },\n                    \"end_col_offset\": 18,\n                    \"end_lineno\": 8,\n                    \"id\": \"passengers_per_day\",\n                    \"lineno\": 8\n                }\n            ],\n            \"type_comment\": null,\n            \"value\": {\n                \"args\": [],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 21,\n                \"end_col_offset\": 65,\n                \"end_lineno\": 8,\n                \"func\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"sum\",\n                    \"col_offset\": 21,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 63,\n                    \"end_lineno\": 8,\n                    \"lineno\": 8,\n                    \"value\": {\n                        \"ast_type\": \"Subscript\",\n                        \"col_offset\": 21,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 59,\n                        \"end_lineno\": 8,\n                        \"lineno\": 8,\n                        \"slice\": {\n                            \"ast_type\": \"Constant\",\n                            \"col_offset\": 41,\n                            \"end_col_offset\": 58,\n                            \"end_lineno\": 8,\n                            \"kind\": null,\n                            \"lineno\": 8,\n                            \"value\": \"passenger_count\"\n                        },\n                        \"value\": {\n                            \"args\": [\n                                {\n                                    \"ast_type\": \"List\",\n                                    \"col_offset\": 32,\n                                    \"ctx\": {\n                                        \"ast_type\": \"Load\"\n                                    },\n                                    \"elts\": [\n                                        {\n                                            \"ast_type\": \"Constant\",\n                                            \"col_offset\": 33,\n                                            \"end_col_offset\": 38,\n                                            \"end_lineno\": 8,\n                                            \"kind\": null,\n                                            \"lineno\": 8,\n                                            \"value\": \"day\"\n                                        }\n                                    ],\n                                    \"end_col_offset\": 39,\n                                    \"end_lineno\": 8,\n                                    \"lineno\": 8\n                                }\n                            ],\n                            \"ast_type\": \"Call\",\n                            \"col_offset\": 21,\n                            \"end_col_offset\": 40,\n                            \"end_lineno\": 8,\n                            \"func\": {\n                                \"ast_type\": \"Attribute\",\n                                \"attr\": \"groupby\",\n                                \"col_offset\": 21,\n                                \"ctx\": {\n                                    \"ast_type\": \"Load\"\n                                },\n                                \"end_col_offset\": 31,\n                                \"end_lineno\": 8,\n                                \"lineno\": 8,\n                                \"value\": {\n                                    \"ast_type\": \"Name\",\n                                    \"col_offset\": 21,\n                                    \"ctx\": {\n                                        \"ast_type\": \"Load\"\n                                    },\n                                    \"end_col_offset\": 23,\n                                    \"end_lineno\": 8,\n                                    \"id\": \"df\",\n                                    \"lineno\": 8\n                                }\n                            },\n                            \"keywords\": [],\n                            \"lineno\": 8\n                        }\n                    }\n                },\n                \"keywords\": [],\n                \"lineno\": 8\n            }\n        },\n        {\n            \"ast_type\": \"Expr\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 28,\n            \"end_lineno\": 10,\n            \"lineno\": 10,\n            \"value\": {\n                \"args\": [\n                    {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 9,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 27,\n                        \"end_lineno\": 10,\n                        \"id\": \"passengers_per_day\",\n                        \"lineno\": 10\n                    }\n                ],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 0,\n                \"end_col_offset\": 28,\n                \"end_lineno\": 10,\n                \"func\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"plot\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 8,\n                    \"end_lineno\": 10,\n                    \"lineno\": 10,\n                    \"value\": {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 0,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 3,\n                        \"end_lineno\": 10,\n                        \"id\": \"plt\",\n                        \"lineno\": 10\n                    }\n                },\n                \"keywords\": [],\n                \"lineno\": 10\n            }\n        },\n        {\n            \"ast_type\": \"Expr\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 10,\n            \"end_lineno\": 11,\n            \"lineno\": 11,\n            \"value\": {\n                \"args\": [],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 0,\n                \"end_col_offset\": 10,\n                \"end_lineno\": 11,\n                \"func\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"show\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 8,\n                    \"end_lineno\": 11,\n                    \"lineno\": 11,\n                    \"value\": {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 0,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 3,\n                        \"end_lineno\": 11,\n                        \"id\": \"plt\",\n                        \"lineno\": 11\n                    }\n                },\n                \"keywords\": [],\n                \"lineno\": 11\n            }\n        },\n        {\n            \"ast_type\": \"Expr\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 25,\n            \"end_lineno\": 13,\n            \"lineno\": 13,\n            \"value\": {\n                \"args\": [\n                    {\n                        \"ast_type\": \"Name\",\n                        \"col_offset\": 6,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 24,\n                        \"end_lineno\": 13,\n                        \"id\": \"passengers_per_day\",\n                        \"lineno\": 13\n                    }\n                ],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 0,\n                \"end_col_offset\": 25,\n                \"end_lineno\": 13,\n                \"func\": {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 5,\n                    \"end_lineno\": 13,\n                    \"id\": \"print\",\n                    \"lineno\": 13\n                },\n                \"keywords\": [],\n                \"lineno\": 13\n            }\n        },\n        {\n            \"ast_type\": \"Assign\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 32,\n            \"end_lineno\": 15,\n            \"lineno\": 15,\n            \"targets\": [\n                {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Store\"\n                    },\n                    \"end_col_offset\": 8,\n                    \"end_lineno\": 15,\n                    \"id\": \"avg_fare\",\n                    \"lineno\": 15\n                }\n            ],\n            \"type_comment\": null,\n            \"value\": {\n                \"args\": [],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 11,\n                \"end_col_offset\": 32,\n                \"end_lineno\": 15,\n                \"func\": {\n                    \"ast_type\": \"Attribute\",\n                    \"attr\": \"mean\",\n                    \"col_offset\": 11,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 30,\n                    \"end_lineno\": 15,\n                    \"lineno\": 15,\n                    \"value\": {\n                        \"ast_type\": \"Attribute\",\n                        \"attr\": \"fare_amount\",\n                        \"col_offset\": 11,\n                        \"ctx\": {\n                            \"ast_type\": \"Load\"\n                        },\n                        \"end_col_offset\": 25,\n                        \"end_lineno\": 15,\n                        \"lineno\": 15,\n                        \"value\": {\n                            \"ast_type\": \"Name\",\n                            \"col_offset\": 11,\n                            \"ctx\": {\n                                \"ast_type\": \"Load\"\n                            },\n                            \"end_col_offset\": 13,\n                            \"end_lineno\": 15,\n                            \"id\": \"df\",\n                            \"lineno\": 15\n                        }\n                    }\n                },\n                \"keywords\": [],\n                \"lineno\": 15\n            }\n        },\n        {\n            \"ast_type\": \"Expr\",\n            \"col_offset\": 0,\n            \"end_col_offset\": 41,\n            \"end_lineno\": 16,\n            \"lineno\": 16,\n            \"value\": {\n                \"args\": [\n                    {\n                        \"ast_type\": \"JoinedStr\",\n                        \"col_offset\": 6,\n                        \"end_col_offset\": 40,\n                        \"end_lineno\": 16,\n                        \"lineno\": 16,\n                        \"values\": [\n                            {\n                                \"ast_type\": \"Constant\",\n                                \"col_offset\": 6,\n                                \"end_col_offset\": 40,\n                                \"end_lineno\": 16,\n                                \"kind\": null,\n                                \"lineno\": 16,\n                                \"value\": \"Average fare amount: \"\n                            },\n                            {\n                                \"ast_type\": \"FormattedValue\",\n                                \"col_offset\": 6,\n                                \"conversion\": -1,\n                                \"end_col_offset\": 40,\n                                \"end_lineno\": 16,\n                                \"format_spec\": null,\n                                \"lineno\": 16,\n                                \"value\": {\n                                    \"ast_type\": \"Name\",\n                                    \"col_offset\": 30,\n                                    \"ctx\": {\n                                        \"ast_type\": \"Load\"\n                                    },\n                                    \"end_col_offset\": 38,\n                                    \"end_lineno\": 16,\n                                    \"id\": \"avg_fare\",\n                                    \"lineno\": 16\n                                }\n                            }\n                        ]\n                    }\n                ],\n                \"ast_type\": \"Call\",\n                \"col_offset\": 0,\n                \"end_col_offset\": 41,\n                \"end_lineno\": 16,\n                \"func\": {\n                    \"ast_type\": \"Name\",\n                    \"col_offset\": 0,\n                    \"ctx\": {\n                        \"ast_type\": \"Load\"\n                    },\n                    \"end_col_offset\": 5,\n                    \"end_lineno\": 16,\n                    \"id\": \"print\",\n                    \"lineno\": 16\n                },\n                \"keywords\": [],\n                \"lineno\": 16\n            }\n        }\n    ],\n    \"type_ignores\": []\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/temp.json b/temp.json
+--- a/temp.json	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/temp.json	(date 1711804188715)
+@@ -40,9 +40,9 @@
+         {
+             "ast_type": "Assign",
+             "col_offset": 0,
+-            "end_col_offset": 119,
+-            "end_lineno": 4,
+-            "lineno": 4,
++            "end_col_offset": 63,
++            "end_lineno": 5,
++            "lineno": 5,
+             "targets": [
+                 {
+                     "ast_type": "Name",
+@@ -50,91 +50,334 @@
+                     "ctx": {
+                         "ast_type": "Store"
+                     },
+-                    "end_col_offset": 2,
+-                    "end_lineno": 4,
+-                    "id": "df",
+-                    "lineno": 4
++                    "end_col_offset": 9,
++                    "end_lineno": 5,
++                    "id": "file_path",
++                    "lineno": 5
+                 }
+             ],
+             "type_comment": null,
+             "value": {
+-                "args": [
+-                    {
+-                        "ast_type": "Constant",
+-                        "col_offset": 17,
+-                        "end_col_offset": 80,
+-                        "end_lineno": 4,
+-                        "kind": null,
+-                        "lineno": 4,
+-                        "value": "/home/chiranmoy/IdeaProjects/data/yellow_tripdata_2015-01.csv"
++                "ast_type": "Constant",
++                "col_offset": 12,
++                "end_col_offset": 63,
++                "end_lineno": 5,
++                "kind": null,
++                "lineno": 5,
++                "value": "/home/chiranmoy/IdeaProjects/data/fbi_reports.csv"
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 33,
++            "end_lineno": 6,
++            "lineno": 6,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
++                    },
++                    "end_col_offset": 8,
++                    "end_lineno": 6,
++                    "id": "fbi_data",
++                    "lineno": 6
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Name",
++                        "col_offset": 23,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 32,
++                        "end_lineno": 6,
++                        "id": "file_path",
++                        "lineno": 6
+                     }
+                 ],
+                 "ast_type": "Call",
+-                "col_offset": 5,
+-                "end_col_offset": 119,
+-                "end_lineno": 4,
++                "col_offset": 11,
++                "end_col_offset": 33,
++                "end_lineno": 6,
+                 "func": {
+                     "ast_type": "Attribute",
+                     "attr": "read_csv",
+-                    "col_offset": 5,
++                    "col_offset": 11,
+                     "ctx": {
+                         "ast_type": "Load"
+                     },
+-                    "end_col_offset": 16,
+-                    "end_lineno": 4,
+-                    "lineno": 4,
++                    "end_col_offset": 22,
++                    "end_lineno": 6,
++                    "lineno": 6,
+                     "value": {
+                         "ast_type": "Name",
+-                        "col_offset": 5,
++                        "col_offset": 11,
+                         "ctx": {
+                             "ast_type": "Load"
+                         },
+-                        "end_col_offset": 7,
+-                        "end_lineno": 4,
++                        "end_col_offset": 13,
++                        "end_lineno": 6,
+                         "id": "pd",
+-                        "lineno": 4
++                        "lineno": 6
+                     }
+                 },
+-                "keywords": [
+-                    {
+-                        "arg": "parse_dates",
+-                        "ast_type": "keyword",
+-                        "col_offset": 82,
+-                        "end_col_offset": 118,
+-                        "end_lineno": 4,
+-                        "lineno": 4,
+-                        "value": {
+-                            "ast_type": "List",
+-                            "col_offset": 94,
+-                            "ctx": {
+-                                "ast_type": "Load"
+-                            },
+-                            "elts": [
+-                                {
+-                                    "ast_type": "Constant",
+-                                    "col_offset": 95,
+-                                    "end_col_offset": 117,
+-                                    "end_lineno": 4,
+-                                    "kind": null,
+-                                    "lineno": 4,
+-                                    "value": "tpep_pickup_datetime"
+-                                }
+-                            ],
+-                            "end_col_offset": 118,
+-                            "end_lineno": 4,
+-                            "lineno": 4
+-                        }
++                "keywords": [],
++                "lineno": 6
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 15,
++            "end_lineno": 8,
++            "lineno": 8,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 15,
++                "end_lineno": 8,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "info",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 13,
++                    "end_lineno": 8,
++                    "lineno": 8,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 8,
++                        "end_lineno": 8,
++                        "id": "fbi_data",
++                        "lineno": 8
++                    }
++                },
++                "keywords": [],
++                "lineno": 8
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 22,
++            "end_lineno": 9,
++            "lineno": 9,
++            "value": {
++                "args": [
++                    {
++                        "args": [],
++                        "ast_type": "Call",
++                        "col_offset": 6,
++                        "end_col_offset": 21,
++                        "end_lineno": 9,
++                        "func": {
++                            "ast_type": "Attribute",
++                            "attr": "head",
++                            "col_offset": 6,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 19,
++                            "end_lineno": 9,
++                            "lineno": 9,
++                            "value": {
++                                "ast_type": "Name",
++                                "col_offset": 6,
++                                "ctx": {
++                                    "ast_type": "Load"
++                                },
++                                "end_col_offset": 14,
++                                "end_lineno": 9,
++                                "id": "fbi_data",
++                                "lineno": 9
++                            }
++                        },
++                        "keywords": [],
++                        "lineno": 9
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 22,
++                "end_lineno": 9,
++                "func": {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 5,
++                    "end_lineno": 9,
++                    "id": "print",
++                    "lineno": 9
++                },
++                "keywords": [],
++                "lineno": 9
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 30,
++            "end_lineno": 11,
++            "lineno": 11,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 10,
++                        "end_col_offset": 29,
++                        "end_lineno": 11,
++                        "kind": null,
++                        "lineno": 11,
++                        "value": "Incidents by Year"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 30,
++                "end_lineno": 11,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "title",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 9,
++                    "end_lineno": 11,
++                    "lineno": 11,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 11,
++                        "id": "plt",
++                        "lineno": 11
++                    }
++                },
++                "keywords": [],
++                "lineno": 11
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 18,
++            "end_lineno": 12,
++            "lineno": 12,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 11,
++                        "end_col_offset": 17,
++                        "end_lineno": 12,
++                        "kind": null,
++                        "lineno": 12,
++                        "value": "Year"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 18,
++                "end_lineno": 12,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "xlabel",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 10,
++                    "end_lineno": 12,
++                    "lineno": 12,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 12,
++                        "id": "plt",
++                        "lineno": 12
++                    }
++                },
++                "keywords": [],
++                "lineno": 12
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 33,
++            "end_lineno": 13,
++            "lineno": 13,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 11,
++                        "end_col_offset": 32,
++                        "end_lineno": 13,
++                        "kind": null,
++                        "lineno": 13,
++                        "value": "Number of Incidents"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 33,
++                "end_lineno": 13,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "ylabel",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 10,
++                    "end_lineno": 13,
++                    "lineno": 13,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 13,
++                        "id": "plt",
++                        "lineno": 13
+                     }
+-                ],
+-                "lineno": 4
++                },
++                "keywords": [],
++                "lineno": 13
+             }
+         },
+         {
+             "ast_type": "Assign",
+             "col_offset": 0,
+-            "end_col_offset": 29,
+-            "end_lineno": 5,
+-            "lineno": 5,
++            "end_col_offset": 52,
++            "end_lineno": 14,
++            "lineno": 14,
+             "targets": [
+                 {
+                     "ast_type": "Name",
+@@ -142,170 +385,321 @@
+                     "ctx": {
+                         "ast_type": "Store"
+                     },
+-                    "end_col_offset": 2,
+-                    "end_lineno": 5,
+-                    "id": "df",
+-                    "lineno": 5
++                    "end_col_offset": 17,
++                    "end_lineno": 14,
++                    "id": "incidents_by_year",
++                    "lineno": 14
+                 }
+             ],
+             "type_comment": null,
+             "value": {
+-                "ast_type": "Subscript",
+-                "col_offset": 5,
+-                "ctx": {
+-                    "ast_type": "Load"
+-                },
+-                "end_col_offset": 29,
+-                "end_lineno": 5,
+-                "lineno": 5,
+-                "slice": {
+-                    "ast_type": "Compare",
+-                    "col_offset": 9,
+-                    "comparators": [
+-                        {
+-                            "ast_type": "Constant",
+-                            "col_offset": 26,
+-                            "end_col_offset": 27,
+-                            "end_lineno": 5,
+-                            "kind": null,
+-                            "lineno": 5,
+-                            "value": 0
+-                        }
+-                    ],
+-                    "end_col_offset": 27,
+-                    "end_lineno": 5,
+-                    "left": {
+-                        "ast_type": "Attribute",
+-                        "attr": "fare_amount",
+-                        "col_offset": 9,
+-                        "ctx": {
+-                            "ast_type": "Load"
+-                        },
+-                        "end_col_offset": 23,
+-                        "end_lineno": 5,
+-                        "lineno": 5,
+-                        "value": {
+-                            "ast_type": "Name",
+-                            "col_offset": 9,
+-                            "ctx": {
+-                                "ast_type": "Load"
+-                            },
+-                            "end_col_offset": 11,
+-                            "end_lineno": 5,
+-                            "id": "df",
+-                            "lineno": 5
+-                        }
+-                    },
+-                    "lineno": 5,
+-                    "ops": [
+-                        {
+-                            "ast_type": "Gt"
+-                        }
+-                    ]
+-                },
+-                "value": {
+-                    "ast_type": "Name",
+-                    "col_offset": 5,
+-                    "ctx": {
+-                        "ast_type": "Load"
+-                    },
+-                    "end_col_offset": 7,
+-                    "end_lineno": 5,
+-                    "id": "df",
+-                    "lineno": 5
+-                }
+-            }
+-        },
+-        {
+-            "ast_type": "Assign",
+-            "col_offset": 0,
+-            "end_col_offset": 48,
+-            "end_lineno": 6,
+-            "lineno": 6,
+-            "targets": [
+-                {
+-                    "ast_type": "Subscript",
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 20,
++                "end_col_offset": 52,
++                "end_lineno": 14,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "count",
++                    "col_offset": 20,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 50,
++                    "end_lineno": 14,
++                    "lineno": 14,
++                    "value": {
++                        "args": [
++                            {
++                                "ast_type": "Constant",
++                                "col_offset": 37,
++                                "end_col_offset": 43,
++                                "end_lineno": 14,
++                                "kind": null,
++                                "lineno": 14,
++                                "value": "Year"
++                            }
++                        ],
++                        "ast_type": "Call",
++                        "col_offset": 20,
++                        "end_col_offset": 44,
++                        "end_lineno": 14,
++                        "func": {
++                            "ast_type": "Attribute",
++                            "attr": "groupby",
++                            "col_offset": 20,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 36,
++                            "end_lineno": 14,
++                            "lineno": 14,
++                            "value": {
++                                "ast_type": "Name",
++                                "col_offset": 20,
++                                "ctx": {
++                                    "ast_type": "Load"
++                                },
++                                "end_col_offset": 28,
++                                "end_lineno": 14,
++                                "id": "fbi_data",
++                                "lineno": 14
++                            }
++                        },
++                        "keywords": [],
++                        "lineno": 14
++                    }
++                },
++                "keywords": [],
++                "lineno": 14
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 27,
++            "end_lineno": 15,
++            "lineno": 15,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Name",
++                        "col_offset": 9,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 26,
++                        "end_lineno": 15,
++                        "id": "incidents_by_year",
++                        "lineno": 15
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 27,
++                "end_lineno": 15,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "plot",
+                     "col_offset": 0,
+                     "ctx": {
+-                        "ast_type": "Store"
++                        "ast_type": "Load"
+                     },
+-                    "end_col_offset": 9,
+-                    "end_lineno": 6,
+-                    "lineno": 6,
+-                    "slice": {
+-                        "ast_type": "Constant",
+-                        "col_offset": 3,
+-                        "end_col_offset": 8,
+-                        "end_lineno": 6,
+-                        "kind": null,
+-                        "lineno": 6,
+-                        "value": "day"
+-                    },
++                    "end_col_offset": 8,
++                    "end_lineno": 15,
++                    "lineno": 15,
+                     "value": {
+                         "ast_type": "Name",
+                         "col_offset": 0,
+                         "ctx": {
+                             "ast_type": "Load"
+                         },
+-                        "end_col_offset": 2,
+-                        "end_lineno": 6,
+-                        "id": "df",
+-                        "lineno": 6
++                        "end_col_offset": 3,
++                        "end_lineno": 15,
++                        "id": "plt",
++                        "lineno": 15
+                     }
+-                }
+-            ],
+-            "type_comment": null,
++                },
++                "keywords": [],
++                "lineno": 15
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 23,
++            "end_lineno": 16,
++            "lineno": 16,
+             "value": {
+-                "ast_type": "Attribute",
+-                "attr": "dayofweek",
+-                "col_offset": 12,
+-                "ctx": {
+-                    "ast_type": "Load"
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 23,
++                "end_lineno": 16,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "xticks",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 10,
++                    "end_lineno": 16,
++                    "lineno": 16,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 16,
++                        "id": "plt",
++                        "lineno": 16
++                    }
++                },
++                "keywords": [
++                    {
++                        "arg": "rotation",
++                        "ast_type": "keyword",
++                        "col_offset": 11,
++                        "end_col_offset": 22,
++                        "end_lineno": 16,
++                        "lineno": 16,
++                        "value": {
++                            "ast_type": "Constant",
++                            "col_offset": 20,
++                            "end_col_offset": 22,
++                            "end_lineno": 16,
++                            "kind": null,
++                            "lineno": 16,
++                            "value": 20
++                        }
++                    }
++                ],
++                "lineno": 16
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 23,
++            "end_lineno": 17,
++            "lineno": 17,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 12,
++                        "end_col_offset": 22,
++                        "end_lineno": 17,
++                        "kind": null,
++                        "lineno": 17,
++                        "value": "fig1.png"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 23,
++                "end_lineno": 17,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "savefig",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 11,
++                    "end_lineno": 17,
++                    "lineno": 17,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 17,
++                        "id": "plt",
++                        "lineno": 17
++                    }
+                 },
+-                "end_col_offset": 48,
+-                "end_lineno": 6,
+-                "lineno": 6,
+-                "value": {
++                "keywords": [],
++                "lineno": 17
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 11,
++            "end_lineno": 18,
++            "lineno": 18,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 11,
++                "end_lineno": 18,
++                "func": {
+                     "ast_type": "Attribute",
+-                    "attr": "dt",
+-                    "col_offset": 12,
++                    "attr": "close",
++                    "col_offset": 0,
+                     "ctx": {
+                         "ast_type": "Load"
+                     },
+-                    "end_col_offset": 38,
+-                    "end_lineno": 6,
+-                    "lineno": 6,
+-                    "value": {
+-                        "ast_type": "Attribute",
+-                        "attr": "tpep_pickup_datetime",
+-                        "col_offset": 12,
+-                        "ctx": {
+-                            "ast_type": "Load"
+-                        },
+-                        "end_col_offset": 35,
+-                        "end_lineno": 6,
+-                        "lineno": 6,
+-                        "value": {
+-                            "ast_type": "Name",
+-                            "col_offset": 12,
+-                            "ctx": {
+-                                "ast_type": "Load"
+-                            },
+-                            "end_col_offset": 14,
+-                            "end_lineno": 6,
+-                            "id": "df",
+-                            "lineno": 6
+-                        }
++                    "end_col_offset": 9,
++                    "end_lineno": 18,
++                    "lineno": 18,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 18,
++                        "id": "plt",
++                        "lineno": 18
++                    }
++                },
++                "keywords": [],
++                "lineno": 18
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 32,
++            "end_lineno": 20,
++            "lineno": 20,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 10,
++                        "end_col_offset": 31,
++                        "end_lineno": 20,
++                        "kind": null,
++                        "lineno": 20,
++                        "value": "Top 10 Weapons Used"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 32,
++                "end_lineno": 20,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "title",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 9,
++                    "end_lineno": 20,
++                    "lineno": 20,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 20,
++                        "id": "plt",
++                        "lineno": 20
+                     }
+-                }
++                },
++                "keywords": [],
++                "lineno": 20
+             }
+         },
+         {
+             "ast_type": "Assign",
+             "col_offset": 0,
+             "end_col_offset": 65,
+-            "end_lineno": 8,
+-            "lineno": 8,
++            "end_lineno": 21,
++            "lineno": 21,
+             "targets": [
+                 {
+                     "ast_type": "Name",
+@@ -313,140 +707,538 @@
+                     "ctx": {
+                         "ast_type": "Store"
+                     },
+-                    "end_col_offset": 18,
+-                    "end_lineno": 8,
+-                    "id": "passengers_per_day",
+-                    "lineno": 8
++                    "end_col_offset": 20,
++                    "end_lineno": 21,
++                    "id": "weapons_distribution",
++                    "lineno": 21
+                 }
+             ],
+             "type_comment": null,
+             "value": {
+-                "args": [],
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 62,
++                        "end_col_offset": 64,
++                        "end_lineno": 21,
++                        "kind": null,
++                        "lineno": 21,
++                        "value": 10
++                    }
++                ],
+                 "ast_type": "Call",
+-                "col_offset": 21,
++                "col_offset": 23,
+                 "end_col_offset": 65,
+-                "end_lineno": 8,
++                "end_lineno": 21,
+                 "func": {
+                     "ast_type": "Attribute",
+-                    "attr": "sum",
+-                    "col_offset": 21,
++                    "attr": "head",
++                    "col_offset": 23,
+                     "ctx": {
+                         "ast_type": "Load"
+                     },
+-                    "end_col_offset": 63,
+-                    "end_lineno": 8,
+-                    "lineno": 8,
++                    "end_col_offset": 61,
++                    "end_lineno": 21,
++                    "lineno": 21,
+                     "value": {
+-                        "ast_type": "Subscript",
+-                        "col_offset": 21,
+-                        "ctx": {
+-                            "ast_type": "Load"
+-                        },
+-                        "end_col_offset": 59,
+-                        "end_lineno": 8,
+-                        "lineno": 8,
+-                        "slice": {
+-                            "ast_type": "Constant",
+-                            "col_offset": 41,
+-                            "end_col_offset": 58,
+-                            "end_lineno": 8,
+-                            "kind": null,
+-                            "lineno": 8,
+-                            "value": "passenger_count"
++                        "args": [],
++                        "ast_type": "Call",
++                        "col_offset": 23,
++                        "end_col_offset": 56,
++                        "end_lineno": 21,
++                        "func": {
++                            "ast_type": "Attribute",
++                            "attr": "value_counts",
++                            "col_offset": 23,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 54,
++                            "end_lineno": 21,
++                            "lineno": 21,
++                            "value": {
++                                "ast_type": "Subscript",
++                                "col_offset": 23,
++                                "ctx": {
++                                    "ast_type": "Load"
++                                },
++                                "end_col_offset": 41,
++                                "end_lineno": 21,
++                                "lineno": 21,
++                                "slice": {
++                                    "ast_type": "Constant",
++                                    "col_offset": 32,
++                                    "end_col_offset": 40,
++                                    "end_lineno": 21,
++                                    "kind": null,
++                                    "lineno": 21,
++                                    "value": "Weapon"
++                                },
++                                "value": {
++                                    "ast_type": "Name",
++                                    "col_offset": 23,
++                                    "ctx": {
++                                        "ast_type": "Load"
++                                    },
++                                    "end_col_offset": 31,
++                                    "end_lineno": 21,
++                                    "id": "fbi_data",
++                                    "lineno": 21
++                                }
++                            }
+                         },
+-                        "value": {
+-                            "args": [
+-                                {
+-                                    "ast_type": "List",
+-                                    "col_offset": 32,
+-                                    "ctx": {
+-                                        "ast_type": "Load"
+-                                    },
+-                                    "elts": [
+-                                        {
+-                                            "ast_type": "Constant",
+-                                            "col_offset": 33,
+-                                            "end_col_offset": 38,
+-                                            "end_lineno": 8,
++                        "keywords": [],
++                        "lineno": 21
++                    }
++                },
++                "keywords": [],
++                "lineno": 21
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 43,
++            "end_lineno": 22,
++            "lineno": 22,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
++                    },
++                    "end_col_offset": 14,
++                    "end_lineno": 22,
++                    "id": "weapons_labels",
++                    "lineno": 22
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "ast_type": "Attribute",
++                "attr": "index",
++                "col_offset": 17,
++                "ctx": {
++                    "ast_type": "Load"
++                },
++                "end_col_offset": 43,
++                "end_lineno": 22,
++                "lineno": 22,
++                "value": {
++                    "ast_type": "Name",
++                    "col_offset": 17,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 37,
++                    "end_lineno": 22,
++                    "id": "weapons_distribution",
++                    "lineno": 22
++                }
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 102,
++            "end_lineno": 23,
++            "lineno": 23,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Name",
++                        "col_offset": 8,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 28,
++                        "end_lineno": 23,
++                        "id": "weapons_distribution",
++                        "lineno": 23
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 102,
++                "end_lineno": 23,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "pie",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 7,
++                    "end_lineno": 23,
++                    "lineno": 23,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 23,
++                        "id": "plt",
++                        "lineno": 23
++                    }
++                },
++                "keywords": [
++                    {
++                        "arg": "labels",
++                        "ast_type": "keyword",
++                        "col_offset": 30,
++                        "end_col_offset": 51,
++                        "end_lineno": 23,
++                        "lineno": 23,
++                        "value": {
++                            "ast_type": "Name",
++                            "col_offset": 37,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 51,
++                            "end_lineno": 23,
++                            "id": "weapons_labels",
++                            "lineno": 23
++                        }
++                    },
++                    {
++                        "arg": "explode",
++                        "ast_type": "keyword",
++                        "col_offset": 53,
++                        "end_col_offset": 82,
++                        "end_lineno": 23,
++                        "lineno": 23,
++                        "value": {
++                            "ast_type": "BinOp",
++                            "col_offset": 61,
++                            "end_col_offset": 82,
++                            "end_lineno": 23,
++                            "left": {
++                                "ast_type": "BinOp",
++                                "col_offset": 61,
++                                "end_col_offset": 74,
++                                "end_lineno": 23,
++                                "left": {
++                                    "ast_type": "BinOp",
++                                    "col_offset": 61,
++                                    "end_col_offset": 66,
++                                    "end_lineno": 23,
++                                    "left": {
++                                        "ast_type": "List",
++                                        "col_offset": 61,
++                                        "ctx": {
++                                            "ast_type": "Load"
++                                        },
++                                        "elts": [
++                                            {
++                                                "ast_type": "Constant",
++                                                "col_offset": 62,
++                                                "end_col_offset": 63,
++                                                "end_lineno": 23,
++                                                "kind": null,
++                                                "lineno": 23,
++                                                "value": 0
++                                            }
++                                        ],
++                                        "end_col_offset": 64,
++                                        "end_lineno": 23,
++                                        "lineno": 23
++                                    },
++                                    "lineno": 23,
++                                    "op": {
++                                        "ast_type": "Mult"
++                                    },
++                                    "right": {
++                                        "ast_type": "Constant",
++                                        "col_offset": 65,
++                                        "end_col_offset": 66,
++                                        "end_lineno": 23,
++                                        "kind": null,
++                                        "lineno": 23,
++                                        "value": 3
++                                    }
++                                },
++                                "lineno": 23,
++                                "op": {
++                                    "ast_type": "Add"
++                                },
++                                "right": {
++                                    "ast_type": "BinOp",
++                                    "col_offset": 67,
++                                    "end_col_offset": 74,
++                                    "end_lineno": 23,
++                                    "left": {
++                                        "ast_type": "List",
++                                        "col_offset": 67,
++                                        "ctx": {
++                                            "ast_type": "Load"
++                                        },
++                                        "elts": [
++                                            {
++                                                "ast_type": "Constant",
++                                                "col_offset": 68,
++                                                "end_col_offset": 71,
++                                                "end_lineno": 23,
++                                                "kind": null,
++                                                "lineno": 23,
++                                                "value": 0.25
++                                            }
++                                        ],
++                                        "end_col_offset": 72,
++                                        "end_lineno": 23,
++                                        "lineno": 23
++                                    },
++                                    "lineno": 23,
++                                    "op": {
++                                        "ast_type": "Mult"
++                                    },
++                                    "right": {
++                                        "ast_type": "Constant",
++                                        "col_offset": 73,
++                                        "end_col_offset": 74,
++                                        "end_lineno": 23,
++                                        "kind": null,
++                                        "lineno": 23,
++                                        "value": 3
++                                    }
++                                }
++                            },
++                            "lineno": 23,
++                            "op": {
++                                "ast_type": "Add"
++                            },
++                            "right": {
++                                "ast_type": "BinOp",
++                                "col_offset": 75,
++                                "end_col_offset": 82,
++                                "end_lineno": 23,
++                                "left": {
++                                    "ast_type": "List",
++                                    "col_offset": 75,
++                                    "ctx": {
++                                        "ast_type": "Load"
++                                    },
++                                    "elts": [
++                                        {
++                                            "ast_type": "Constant",
++                                            "col_offset": 76,
++                                            "end_col_offset": 79,
++                                            "end_lineno": 23,
+                                             "kind": null,
+-                                            "lineno": 8,
+-                                            "value": "day"
+-                                        }
+-                                    ],
+-                                    "end_col_offset": 39,
+-                                    "end_lineno": 8,
+-                                    "lineno": 8
+-                                }
+-                            ],
+-                            "ast_type": "Call",
+-                            "col_offset": 21,
+-                            "end_col_offset": 40,
+-                            "end_lineno": 8,
+-                            "func": {
+-                                "ast_type": "Attribute",
+-                                "attr": "groupby",
+-                                "col_offset": 21,
+-                                "ctx": {
+-                                    "ast_type": "Load"
+-                                },
+-                                "end_col_offset": 31,
+-                                "end_lineno": 8,
+-                                "lineno": 8,
+-                                "value": {
+-                                    "ast_type": "Name",
+-                                    "col_offset": 21,
+-                                    "ctx": {
+-                                        "ast_type": "Load"
+-                                    },
+-                                    "end_col_offset": 23,
+-                                    "end_lineno": 8,
+-                                    "id": "df",
+-                                    "lineno": 8
+-                                }
+-                            },
+-                            "keywords": [],
+-                            "lineno": 8
+-                        }
++                                            "lineno": 23,
++                                            "value": 0.75
++                                        }
++                                    ],
++                                    "end_col_offset": 80,
++                                    "end_lineno": 23,
++                                    "lineno": 23
++                                },
++                                "lineno": 23,
++                                "op": {
++                                    "ast_type": "Mult"
++                                },
++                                "right": {
++                                    "ast_type": "Constant",
++                                    "col_offset": 81,
++                                    "end_col_offset": 82,
++                                    "end_lineno": 23,
++                                    "kind": null,
++                                    "lineno": 23,
++                                    "value": 4
++                                }
++                            }
++                        }
++                    },
++                    {
++                        "arg": "autopct",
++                        "ast_type": "keyword",
++                        "col_offset": 84,
++                        "end_col_offset": 101,
++                        "end_lineno": 23,
++                        "lineno": 23,
++                        "value": {
++                            "ast_type": "Constant",
++                            "col_offset": 92,
++                            "end_col_offset": 101,
++                            "end_lineno": 23,
++                            "kind": null,
++                            "lineno": 23,
++                            "value": "%1.1f%%"
++                        }
++                    }
++                ],
++                "lineno": 23
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 23,
++            "end_lineno": 24,
++            "lineno": 24,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 12,
++                        "end_col_offset": 22,
++                        "end_lineno": 24,
++                        "kind": null,
++                        "lineno": 24,
++                        "value": "fig2.png"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 23,
++                "end_lineno": 24,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "savefig",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 11,
++                    "end_lineno": 24,
++                    "lineno": 24,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 24,
++                        "id": "plt",
++                        "lineno": 24
++                    }
++                },
++                "keywords": [],
++                "lineno": 24
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 11,
++            "end_lineno": 25,
++            "lineno": 25,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 11,
++                "end_lineno": 25,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "close",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 9,
++                    "end_lineno": 25,
++                    "lineno": 25,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 25,
++                        "id": "plt",
++                        "lineno": 25
+                     }
+                 },
+                 "keywords": [],
+-                "lineno": 8
++                "lineno": 25
+             }
+         },
+         {
+             "ast_type": "Expr",
+             "col_offset": 0,
+-            "end_col_offset": 28,
+-            "end_lineno": 10,
+-            "lineno": 10,
++            "end_col_offset": 41,
++            "end_lineno": 27,
++            "lineno": 27,
+             "value": {
+                 "args": [
+                     {
++                        "ast_type": "Constant",
++                        "col_offset": 10,
++                        "end_col_offset": 40,
++                        "end_lineno": 27,
++                        "kind": null,
++                        "lineno": 27,
++                        "value": "Top 10 Most Dangerous Cities"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 41,
++                "end_lineno": 27,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "title",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 9,
++                    "end_lineno": 27,
++                    "lineno": 27,
++                    "value": {
+                         "ast_type": "Name",
+-                        "col_offset": 9,
++                        "col_offset": 0,
+                         "ctx": {
+                             "ast_type": "Load"
+                         },
+-                        "end_col_offset": 27,
+-                        "end_lineno": 10,
+-                        "id": "passengers_per_day",
+-                        "lineno": 10
++                        "end_col_offset": 3,
++                        "end_lineno": 27,
++                        "id": "plt",
++                        "lineno": 27
++                    }
++                },
++                "keywords": [],
++                "lineno": 27
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 18,
++            "end_lineno": 28,
++            "lineno": 28,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 11,
++                        "end_col_offset": 17,
++                        "end_lineno": 28,
++                        "kind": null,
++                        "lineno": 28,
++                        "value": "City"
+                     }
+                 ],
+                 "ast_type": "Call",
+                 "col_offset": 0,
+-                "end_col_offset": 28,
+-                "end_lineno": 10,
++                "end_col_offset": 18,
++                "end_lineno": 28,
+                 "func": {
+                     "ast_type": "Attribute",
+-                    "attr": "plot",
++                    "attr": "xlabel",
+                     "col_offset": 0,
+                     "ctx": {
+                         "ast_type": "Load"
+                     },
+-                    "end_col_offset": 8,
+-                    "end_lineno": 10,
+-                    "lineno": 10,
++                    "end_col_offset": 10,
++                    "end_lineno": 28,
++                    "lineno": 28,
+                     "value": {
+                         "ast_type": "Name",
+                         "col_offset": 0,
+@@ -454,37 +1246,372 @@
+                             "ast_type": "Load"
+                         },
+                         "end_col_offset": 3,
+-                        "end_lineno": 10,
++                        "end_lineno": 28,
+                         "id": "plt",
+-                        "lineno": 10
++                        "lineno": 28
+                     }
+                 },
+                 "keywords": [],
+-                "lineno": 10
++                "lineno": 28
+             }
+         },
+         {
+             "ast_type": "Expr",
+             "col_offset": 0,
+-            "end_col_offset": 10,
+-            "end_lineno": 11,
+-            "lineno": 11,
++            "end_col_offset": 33,
++            "end_lineno": 29,
++            "lineno": 29,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 11,
++                        "end_col_offset": 32,
++                        "end_lineno": 29,
++                        "kind": null,
++                        "lineno": 29,
++                        "value": "Number of Incidents"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 33,
++                "end_lineno": 29,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "ylabel",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 10,
++                    "end_lineno": 29,
++                    "lineno": 29,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 29,
++                        "id": "plt",
++                        "lineno": 29
++                    }
++                },
++                "keywords": [],
++                "lineno": 29
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 59,
++            "end_lineno": 30,
++            "lineno": 30,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
++                    },
++                    "end_col_offset": 16,
++                    "end_lineno": 30,
++                    "id": "dangerous_cities",
++                    "lineno": 30
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 56,
++                        "end_col_offset": 58,
++                        "end_lineno": 30,
++                        "kind": null,
++                        "lineno": 30,
++                        "value": 10
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 19,
++                "end_col_offset": 59,
++                "end_lineno": 30,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "head",
++                    "col_offset": 19,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 55,
++                    "end_lineno": 30,
++                    "lineno": 30,
++                    "value": {
++                        "args": [],
++                        "ast_type": "Call",
++                        "col_offset": 19,
++                        "end_col_offset": 50,
++                        "end_lineno": 30,
++                        "func": {
++                            "ast_type": "Attribute",
++                            "attr": "value_counts",
++                            "col_offset": 19,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 48,
++                            "end_lineno": 30,
++                            "lineno": 30,
++                            "value": {
++                                "ast_type": "Subscript",
++                                "col_offset": 19,
++                                "ctx": {
++                                    "ast_type": "Load"
++                                },
++                                "end_col_offset": 35,
++                                "end_lineno": 30,
++                                "lineno": 30,
++                                "slice": {
++                                    "ast_type": "Constant",
++                                    "col_offset": 28,
++                                    "end_col_offset": 34,
++                                    "end_lineno": 30,
++                                    "kind": null,
++                                    "lineno": 30,
++                                    "value": "City"
++                                },
++                                "value": {
++                                    "ast_type": "Name",
++                                    "col_offset": 19,
++                                    "ctx": {
++                                        "ast_type": "Load"
++                                    },
++                                    "end_col_offset": 27,
++                                    "end_lineno": 30,
++                                    "id": "fbi_data",
++                                    "lineno": 30
++                                }
++                            }
++                        },
++                        "keywords": [],
++                        "lineno": 30
++                    }
++                },
++                "keywords": [],
++                "lineno": 30
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 37,
++            "end_lineno": 31,
++            "lineno": 31,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
++                    },
++                    "end_col_offset": 12,
++                    "end_lineno": 31,
++                    "id": "cities_label",
++                    "lineno": 31
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "ast_type": "Attribute",
++                "attr": "index",
++                "col_offset": 15,
++                "ctx": {
++                    "ast_type": "Load"
++                },
++                "end_col_offset": 37,
++                "end_lineno": 31,
++                "lineno": 31,
++                "value": {
++                    "ast_type": "Name",
++                    "col_offset": 15,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 31,
++                    "end_lineno": 31,
++                    "id": "dangerous_cities",
++                    "lineno": 31
++                }
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 48,
++            "end_lineno": 32,
++            "lineno": 32,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 48,
++                "end_lineno": 32,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "bar",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 7,
++                    "end_lineno": 32,
++                    "lineno": 32,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 32,
++                        "id": "plt",
++                        "lineno": 32
++                    }
++                },
++                "keywords": [
++                    {
++                        "arg": "x",
++                        "ast_type": "keyword",
++                        "col_offset": 8,
++                        "end_col_offset": 22,
++                        "end_lineno": 32,
++                        "lineno": 32,
++                        "value": {
++                            "ast_type": "Name",
++                            "col_offset": 10,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 22,
++                            "end_lineno": 32,
++                            "id": "cities_label",
++                            "lineno": 32
++                        }
++                    },
++                    {
++                        "arg": "height",
++                        "ast_type": "keyword",
++                        "col_offset": 24,
++                        "end_col_offset": 47,
++                        "end_lineno": 32,
++                        "lineno": 32,
++                        "value": {
++                            "ast_type": "Name",
++                            "col_offset": 31,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 47,
++                            "end_lineno": 32,
++                            "id": "dangerous_cities",
++                            "lineno": 32
++                        }
++                    }
++                ],
++                "lineno": 32
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 23,
++            "end_lineno": 33,
++            "lineno": 33,
+             "value": {
+                 "args": [],
+                 "ast_type": "Call",
+                 "col_offset": 0,
+-                "end_col_offset": 10,
+-                "end_lineno": 11,
++                "end_col_offset": 23,
++                "end_lineno": 33,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "xticks",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 10,
++                    "end_lineno": 33,
++                    "lineno": 33,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 33,
++                        "id": "plt",
++                        "lineno": 33
++                    }
++                },
++                "keywords": [
++                    {
++                        "arg": "rotation",
++                        "ast_type": "keyword",
++                        "col_offset": 11,
++                        "end_col_offset": 22,
++                        "end_lineno": 33,
++                        "lineno": 33,
++                        "value": {
++                            "ast_type": "Constant",
++                            "col_offset": 20,
++                            "end_col_offset": 22,
++                            "end_lineno": 33,
++                            "kind": null,
++                            "lineno": 33,
++                            "value": 20
++                        }
++                    }
++                ],
++                "lineno": 33
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 23,
++            "end_lineno": 34,
++            "lineno": 34,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 12,
++                        "end_col_offset": 22,
++                        "end_lineno": 34,
++                        "kind": null,
++                        "lineno": 34,
++                        "value": "fig3.png"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 23,
++                "end_lineno": 34,
+                 "func": {
+                     "ast_type": "Attribute",
+-                    "attr": "show",
++                    "attr": "savefig",
+                     "col_offset": 0,
+                     "ctx": {
+                         "ast_type": "Load"
+                     },
+-                    "end_col_offset": 8,
+-                    "end_lineno": 11,
+-                    "lineno": 11,
++                    "end_col_offset": 11,
++                    "end_lineno": 34,
++                    "lineno": 34,
+                     "value": {
+                         "ast_type": "Name",
+                         "col_offset": 0,
+@@ -492,21 +1619,197 @@
+                             "ast_type": "Load"
+                         },
+                         "end_col_offset": 3,
+-                        "end_lineno": 11,
++                        "end_lineno": 34,
+                         "id": "plt",
+-                        "lineno": 11
++                        "lineno": 34
+                     }
+                 },
+                 "keywords": [],
+-                "lineno": 11
++                "lineno": 34
+             }
+         },
+         {
+             "ast_type": "Expr",
+             "col_offset": 0,
+-            "end_col_offset": 25,
+-            "end_lineno": 13,
+-            "lineno": 13,
++            "end_col_offset": 11,
++            "end_lineno": 35,
++            "lineno": 35,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 11,
++                "end_lineno": 35,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "close",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 9,
++                    "end_lineno": 35,
++                    "lineno": 35,
++                    "value": {
++                        "ast_type": "Name",
++                        "col_offset": 0,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 3,
++                        "end_lineno": 35,
++                        "id": "plt",
++                        "lineno": 35
++                    }
++                },
++                "keywords": [],
++                "lineno": 35
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 81,
++            "end_lineno": 37,
++            "lineno": 37,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
++                    },
++                    "end_col_offset": 26,
++                    "end_lineno": 37,
++                    "id": "average_victim_age_by_race",
++                    "lineno": 37
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 29,
++                "end_col_offset": 81,
++                "end_lineno": 37,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "mean",
++                    "col_offset": 29,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 79,
++                    "end_lineno": 37,
++                    "lineno": 37,
++                    "value": {
++                        "ast_type": "Subscript",
++                        "col_offset": 29,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 74,
++                        "end_lineno": 37,
++                        "lineno": 37,
++                        "slice": {
++                            "ast_type": "Constant",
++                            "col_offset": 61,
++                            "end_col_offset": 73,
++                            "end_lineno": 37,
++                            "kind": null,
++                            "lineno": 37,
++                            "value": "Victim Age"
++                        },
++                        "value": {
++                            "args": [
++                                {
++                                    "ast_type": "Constant",
++                                    "col_offset": 46,
++                                    "end_col_offset": 59,
++                                    "end_lineno": 37,
++                                    "kind": null,
++                                    "lineno": 37,
++                                    "value": "Victim Race"
++                                }
++                            ],
++                            "ast_type": "Call",
++                            "col_offset": 29,
++                            "end_col_offset": 60,
++                            "end_lineno": 37,
++                            "func": {
++                                "ast_type": "Attribute",
++                                "attr": "groupby",
++                                "col_offset": 29,
++                                "ctx": {
++                                    "ast_type": "Load"
++                                },
++                                "end_col_offset": 45,
++                                "end_lineno": 37,
++                                "lineno": 37,
++                                "value": {
++                                    "ast_type": "Name",
++                                    "col_offset": 29,
++                                    "ctx": {
++                                        "ast_type": "Load"
++                                    },
++                                    "end_col_offset": 37,
++                                    "end_lineno": 37,
++                                    "id": "fbi_data",
++                                    "lineno": 37
++                                }
++                            },
++                            "keywords": [],
++                            "lineno": 37
++                        }
++                    }
++                },
++                "keywords": [],
++                "lineno": 37
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 36,
++            "end_lineno": 38,
++            "lineno": 38,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "Constant",
++                        "col_offset": 6,
++                        "end_col_offset": 35,
++                        "end_lineno": 38,
++                        "kind": null,
++                        "lineno": 38,
++                        "value": "Average Victim Age by Race:"
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 36,
++                "end_lineno": 38,
++                "func": {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 5,
++                    "end_lineno": 38,
++                    "id": "print",
++                    "lineno": 38
++                },
++                "keywords": [],
++                "lineno": 38
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 33,
++            "end_lineno": 39,
++            "lineno": 39,
+             "value": {
+                 "args": [
+                     {
+@@ -515,16 +1818,16 @@
+                         "ctx": {
+                             "ast_type": "Load"
+                         },
+-                        "end_col_offset": 24,
+-                        "end_lineno": 13,
+-                        "id": "passengers_per_day",
+-                        "lineno": 13
++                        "end_col_offset": 32,
++                        "end_lineno": 39,
++                        "id": "average_victim_age_by_race",
++                        "lineno": 39
+                     }
+                 ],
+                 "ast_type": "Call",
+                 "col_offset": 0,
+-                "end_col_offset": 25,
+-                "end_lineno": 13,
++                "end_col_offset": 33,
++                "end_lineno": 39,
+                 "func": {
+                     "ast_type": "Name",
+                     "col_offset": 0,
+@@ -532,20 +1835,20 @@
+                         "ast_type": "Load"
+                     },
+                     "end_col_offset": 5,
+-                    "end_lineno": 13,
++                    "end_lineno": 39,
+                     "id": "print",
+-                    "lineno": 13
++                    "lineno": 39
+                 },
+                 "keywords": [],
+-                "lineno": 13
++                "lineno": 39
+             }
+         },
+         {
+             "ast_type": "Assign",
+             "col_offset": 0,
+-            "end_col_offset": 32,
+-            "end_lineno": 15,
+-            "lineno": 15,
++            "end_col_offset": 46,
++            "end_lineno": 41,
++            "lineno": 41,
+             "targets": [
+                 {
+                     "ast_type": "Name",
+@@ -553,98 +1856,177 @@
+                     "ctx": {
+                         "ast_type": "Store"
+                     },
+-                    "end_col_offset": 8,
+-                    "end_lineno": 15,
+-                    "id": "avg_fare",
+-                    "lineno": 15
++                    "end_col_offset": 13,
++                    "end_lineno": 41,
++                    "id": "total_victims",
++                    "lineno": 41
+                 }
+             ],
+             "type_comment": null,
+             "value": {
+                 "args": [],
+                 "ast_type": "Call",
+-                "col_offset": 11,
+-                "end_col_offset": 32,
+-                "end_lineno": 15,
++                "col_offset": 16,
++                "end_col_offset": 46,
++                "end_lineno": 41,
+                 "func": {
+                     "ast_type": "Attribute",
+-                    "attr": "mean",
+-                    "col_offset": 11,
++                    "attr": "sum",
++                    "col_offset": 16,
+                     "ctx": {
+                         "ast_type": "Load"
++                    },
++                    "end_col_offset": 44,
++                    "end_lineno": 41,
++                    "lineno": 41,
++                    "value": {
++                        "ast_type": "Subscript",
++                        "col_offset": 16,
++                        "ctx": {
++                            "ast_type": "Load"
++                        },
++                        "end_col_offset": 40,
++                        "end_lineno": 41,
++                        "lineno": 41,
++                        "slice": {
++                            "ast_type": "Constant",
++                            "col_offset": 25,
++                            "end_col_offset": 39,
++                            "end_lineno": 41,
++                            "kind": null,
++                            "lineno": 41,
++                            "value": "Victim Count"
++                        },
++                        "value": {
++                            "ast_type": "Name",
++                            "col_offset": 16,
++                            "ctx": {
++                                "ast_type": "Load"
++                            },
++                            "end_col_offset": 24,
++                            "end_lineno": 41,
++                            "id": "fbi_data",
++                            "lineno": 41
++                        }
++                    }
++                },
++                "keywords": [],
++                "lineno": 41
++            }
++        },
++        {
++            "ast_type": "Assign",
++            "col_offset": 0,
++            "end_col_offset": 56,
++            "end_lineno": 42,
++            "lineno": 42,
++            "targets": [
++                {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Store"
+                     },
+-                    "end_col_offset": 30,
+-                    "end_lineno": 15,
+-                    "lineno": 15,
+-                    "value": {
+-                        "ast_type": "Attribute",
+-                        "attr": "fare_amount",
+-                        "col_offset": 11,
++                    "end_col_offset": 18,
++                    "end_lineno": 42,
++                    "id": "total_perpetrators",
++                    "lineno": 42
++                }
++            ],
++            "type_comment": null,
++            "value": {
++                "args": [],
++                "ast_type": "Call",
++                "col_offset": 21,
++                "end_col_offset": 56,
++                "end_lineno": 42,
++                "func": {
++                    "ast_type": "Attribute",
++                    "attr": "sum",
++                    "col_offset": 21,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 54,
++                    "end_lineno": 42,
++                    "lineno": 42,
++                    "value": {
++                        "ast_type": "Subscript",
++                        "col_offset": 21,
+                         "ctx": {
+                             "ast_type": "Load"
+                         },
+-                        "end_col_offset": 25,
+-                        "end_lineno": 15,
+-                        "lineno": 15,
++                        "end_col_offset": 50,
++                        "end_lineno": 42,
++                        "lineno": 42,
++                        "slice": {
++                            "ast_type": "Constant",
++                            "col_offset": 30,
++                            "end_col_offset": 49,
++                            "end_lineno": 42,
++                            "kind": null,
++                            "lineno": 42,
++                            "value": "Perpetrator Count"
++                        },
+                         "value": {
+                             "ast_type": "Name",
+-                            "col_offset": 11,
++                            "col_offset": 21,
+                             "ctx": {
+                                 "ast_type": "Load"
+                             },
+-                            "end_col_offset": 13,
+-                            "end_lineno": 15,
+-                            "id": "df",
+-                            "lineno": 15
++                            "end_col_offset": 29,
++                            "end_lineno": 42,
++                            "id": "fbi_data",
++                            "lineno": 42
+                         }
+                     }
+                 },
+                 "keywords": [],
+-                "lineno": 15
++                "lineno": 42
+             }
+         },
+         {
+             "ast_type": "Expr",
+             "col_offset": 0,
+-            "end_col_offset": 41,
+-            "end_lineno": 16,
+-            "lineno": 16,
++            "end_col_offset": 50,
++            "end_lineno": 43,
++            "lineno": 43,
+             "value": {
+                 "args": [
+                     {
+                         "ast_type": "JoinedStr",
+                         "col_offset": 6,
+-                        "end_col_offset": 40,
+-                        "end_lineno": 16,
+-                        "lineno": 16,
++                        "end_col_offset": 49,
++                        "end_lineno": 43,
++                        "lineno": 43,
+                         "values": [
+                             {
+                                 "ast_type": "Constant",
+                                 "col_offset": 6,
+-                                "end_col_offset": 40,
+-                                "end_lineno": 16,
++                                "end_col_offset": 49,
++                                "end_lineno": 43,
+                                 "kind": null,
+-                                "lineno": 16,
+-                                "value": "Average fare amount: "
++                                "lineno": 43,
++                                "value": "Total Number of Victims: "
+                             },
+                             {
+                                 "ast_type": "FormattedValue",
+                                 "col_offset": 6,
+                                 "conversion": -1,
+-                                "end_col_offset": 40,
+-                                "end_lineno": 16,
++                                "end_col_offset": 49,
++                                "end_lineno": 43,
+                                 "format_spec": null,
+-                                "lineno": 16,
++                                "lineno": 43,
+                                 "value": {
+                                     "ast_type": "Name",
+-                                    "col_offset": 30,
++                                    "col_offset": 34,
+                                     "ctx": {
+                                         "ast_type": "Load"
+                                     },
+-                                    "end_col_offset": 38,
+-                                    "end_lineno": 16,
+-                                    "id": "avg_fare",
+-                                    "lineno": 16
++                                    "end_col_offset": 47,
++                                    "end_lineno": 43,
++                                    "id": "total_victims",
++                                    "lineno": 43
+                                 }
+                             }
+                         ]
+@@ -652,8 +2034,8 @@
+                 ],
+                 "ast_type": "Call",
+                 "col_offset": 0,
+-                "end_col_offset": 41,
+-                "end_lineno": 16,
++                "end_col_offset": 50,
++                "end_lineno": 43,
+                 "func": {
+                     "ast_type": "Name",
+                     "col_offset": 0,
+@@ -661,12 +2043,78 @@
+                         "ast_type": "Load"
+                     },
+                     "end_col_offset": 5,
+-                    "end_lineno": 16,
++                    "end_lineno": 43,
+                     "id": "print",
+-                    "lineno": 16
++                    "lineno": 43
+                 },
+                 "keywords": [],
+-                "lineno": 16
++                "lineno": 43
++            }
++        },
++        {
++            "ast_type": "Expr",
++            "col_offset": 0,
++            "end_col_offset": 60,
++            "end_lineno": 44,
++            "lineno": 44,
++            "value": {
++                "args": [
++                    {
++                        "ast_type": "JoinedStr",
++                        "col_offset": 6,
++                        "end_col_offset": 59,
++                        "end_lineno": 44,
++                        "lineno": 44,
++                        "values": [
++                            {
++                                "ast_type": "Constant",
++                                "col_offset": 6,
++                                "end_col_offset": 59,
++                                "end_lineno": 44,
++                                "kind": null,
++                                "lineno": 44,
++                                "value": "Total Number of Perpetrators: "
++                            },
++                            {
++                                "ast_type": "FormattedValue",
++                                "col_offset": 6,
++                                "conversion": -1,
++                                "end_col_offset": 59,
++                                "end_lineno": 44,
++                                "format_spec": null,
++                                "lineno": 44,
++                                "value": {
++                                    "ast_type": "Name",
++                                    "col_offset": 39,
++                                    "ctx": {
++                                        "ast_type": "Load"
++                                    },
++                                    "end_col_offset": 57,
++                                    "end_lineno": 44,
++                                    "id": "total_perpetrators",
++                                    "lineno": 44
++                                }
++                            }
++                        ]
++                    }
++                ],
++                "ast_type": "Call",
++                "col_offset": 0,
++                "end_col_offset": 60,
++                "end_lineno": 44,
++                "func": {
++                    "ast_type": "Name",
++                    "col_offset": 0,
++                    "ctx": {
++                        "ast_type": "Load"
++                    },
++                    "end_col_offset": 5,
++                    "end_lineno": 44,
++                    "id": "print",
++                    "lineno": 44
++                },
++                "keywords": [],
++                "lineno": 44
+             }
+         }
+     ],
+Index: pythonIR/Opt_Code_test.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>\nimport matplotlib.pyplot as plt\nimport pandas as pd\nimport numpy as np\nSO_c_d_t = {\"city\":\"str\",\"driver_count\":\"category\",\"type\":\"category\"}\ndf_city_data_to_load = pd.read_csv('/home/chiranmoy/IdeaProjects/python-chunking/vldb/Chiranmoy benchmark/magicpush/51_ready/city_data.csv',dtype=SO_c_d_t)\nSO_c_d_t = {\"city\":\"str\",\"fare\":\"float32\",\"ride_id\":\"float32\"}\ndf_riders_data_to_load = pd.read_csv('/home/chiranmoy/IdeaProjects/python-chunking/vldb/Chiranmoy benchmark/magicpush/51_ready/ride_data.csv',dtype=SO_c_d_t)\nmerge_table_df = pd.merge(df_city_data_to_load,df_riders_data_to_load,on='city',how='left')\nprint(merge_table_df.head(5))\nurban_city = merge_table_df[(merge_table_df['type'] == 'Urban')].groupby(['city'])\nrural_city = merge_table_df[(merge_table_df['type'] == 'Rural')].groupby(['city'])\nsuburban_city = merge_table_df[(merge_table_df['type'] == 'Suburban')].groupby(['city'])\nx_urban = urban_city['ride_id'].count()\ny_urban = urban_city['fare'].mean()\ns_urban = urban_city['driver_count'].mean()\nx_rural = rural_city['ride_id'].count()\ny_rural = rural_city['fare'].mean()\ns_rural = rural_city['driver_count'].mean()\nx_suburban = suburban_city['ride_id'].count()\ny_suburban = suburban_city['fare'].mean()\ns_suburban = suburban_city['driver_count'].mean()\nplt.scatter(x_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural, s_urban, y_urban]),y_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural, s_urban]),label='Urban',s=(s_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural]) * 10),color=['pink'],edgecolor='black',alpha=1,marker='o')\nplt.scatter(x_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, s_rural, y_rural]),y_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, s_rural]),label='Rural',s=(s_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban]) * 10),color=['purple'],edgecolor='black',alpha=1,marker='o')\nplt.scatter(x_suburban.compute(live_df=[df_city_data_to_load, merge_table_df, s_suburban, y_suburban]),y_suburban.compute(live_df=[df_city_data_to_load, merge_table_df, s_suburban]),label='Suburban',s=(s_suburban.compute(live_df=[df_city_data_to_load, merge_table_df]) * 10),color=['orange'],edgecolor='black',alpha=1,marker='o')\nplt.grid()\nplt.xlabel('Total Number of Rides (Per City)')\nplt.ylabel('Average Fare ($)')\nplt.title('Pyber Ride Sharing Data - 2016')\nlegend = plt.legend(fontsize=9.5,title='City Types',loc='best')\nlegend.legendHandles[0]._sizes = [40]\nlegend.legendHandles[1]._sizes = [40]\nlegend.legendHandles[2]._sizes = [40]\nplt.text(42,35,'Note: Circle size correlates with driver count per city.',fontsize=12)\nplt.savefig('PyPlot.png')\ntype_grouped = merge_table_df.groupby(['type'])\nfare_sum = type_grouped['fare'].sum()\nlabels = ['Rural','Suburban','Urban']\nexplode = (0.1,0.1,0.1)\ncolors = ['lightblue','lightgreen','lightcoral']\nplt.pie(fare_sum.compute(live_df=[df_city_data_to_load, type_grouped]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)\nplt.title('% of Total Fares by City Type')\nplt.savefig('PyChartTotalFares.png')\nrides_count = type_grouped['ride_id'].count()\nlabels = ['Rural','Suburban','Urban']\nexplode = (0.1,0.1,0.1)\ncolors = ['lightblue','lightgreen','lightcoral']\nplt.pie(rides_count.compute(live_df=[df_city_data_to_load]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)\nplt.title('% of Total Rides by City Type')\nplt.savefig('PyChartTotalRides.png')\ntype_grouped_drivers = df_city_data_to_load.groupby(['type'])\ndrivers_sum = type_grouped_drivers['driver_count'].sum()\nlabels = ['Rural','Suburban','Urban']\nexplode = (0.1,0.1,0.1)\ncolors = ['lightblue','lightgreen','lightcoral']\nplt.pie(drivers_sum.compute(live_df=[]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)\nplt.title('% of Total Drivers by City Type')\nplt.savefig('PyChartTotalDrivers.png')\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/pythonIR/Opt_Code_test.py b/pythonIR/Opt_Code_test.py
+--- a/pythonIR/Opt_Code_test.py	(revision 6339b5ce2a11d63ca90c79293801b0cfe2d2bfee)
++++ b/pythonIR/Opt_Code_test.py	(date 1711804191315)
+@@ -1,58 +1,39 @@
+ 
+-import matplotlib.pyplot as plt
+ import pandas as pd
+-import numpy as np
+-SO_c_d_t = {"city":"str","driver_count":"category","type":"category"}
+-df_city_data_to_load = pd.read_csv('/home/chiranmoy/IdeaProjects/python-chunking/vldb/Chiranmoy benchmark/magicpush/51_ready/city_data.csv',dtype=SO_c_d_t)
+-SO_c_d_t = {"city":"str","fare":"float32","ride_id":"float32"}
+-df_riders_data_to_load = pd.read_csv('/home/chiranmoy/IdeaProjects/python-chunking/vldb/Chiranmoy benchmark/magicpush/51_ready/ride_data.csv',dtype=SO_c_d_t)
+-merge_table_df = pd.merge(df_city_data_to_load,df_riders_data_to_load,on='city',how='left')
+-print(merge_table_df.head(5))
+-urban_city = merge_table_df[(merge_table_df['type'] == 'Urban')].groupby(['city'])
+-rural_city = merge_table_df[(merge_table_df['type'] == 'Rural')].groupby(['city'])
+-suburban_city = merge_table_df[(merge_table_df['type'] == 'Suburban')].groupby(['city'])
+-x_urban = urban_city['ride_id'].count()
+-y_urban = urban_city['fare'].mean()
+-s_urban = urban_city['driver_count'].mean()
+-x_rural = rural_city['ride_id'].count()
+-y_rural = rural_city['fare'].mean()
+-s_rural = rural_city['driver_count'].mean()
+-x_suburban = suburban_city['ride_id'].count()
+-y_suburban = suburban_city['fare'].mean()
+-s_suburban = suburban_city['driver_count'].mean()
+-plt.scatter(x_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural, s_urban, y_urban]),y_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural, s_urban]),label='Urban',s=(s_urban.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, x_rural, y_rural, s_rural]) * 10),color=['pink'],edgecolor='black',alpha=1,marker='o')
+-plt.scatter(x_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, s_rural, y_rural]),y_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban, s_rural]),label='Rural',s=(s_rural.compute(live_df=[df_city_data_to_load, merge_table_df, x_suburban, y_suburban, s_suburban]) * 10),color=['purple'],edgecolor='black',alpha=1,marker='o')
+-plt.scatter(x_suburban.compute(live_df=[df_city_data_to_load, merge_table_df, s_suburban, y_suburban]),y_suburban.compute(live_df=[df_city_data_to_load, merge_table_df, s_suburban]),label='Suburban',s=(s_suburban.compute(live_df=[df_city_data_to_load, merge_table_df]) * 10),color=['orange'],edgecolor='black',alpha=1,marker='o')
+-plt.grid()
+-plt.xlabel('Total Number of Rides (Per City)')
+-plt.ylabel('Average Fare ($)')
+-plt.title('Pyber Ride Sharing Data - 2016')
+-legend = plt.legend(fontsize=9.5,title='City Types',loc='best')
+-legend.legendHandles[0]._sizes = [40]
+-legend.legendHandles[1]._sizes = [40]
+-legend.legendHandles[2]._sizes = [40]
+-plt.text(42,35,'Note: Circle size correlates with driver count per city.',fontsize=12)
+-plt.savefig('PyPlot.png')
+-type_grouped = merge_table_df.groupby(['type'])
+-fare_sum = type_grouped['fare'].sum()
+-labels = ['Rural','Suburban','Urban']
+-explode = (0.1,0.1,0.1)
+-colors = ['lightblue','lightgreen','lightcoral']
+-plt.pie(fare_sum.compute(live_df=[df_city_data_to_load, type_grouped]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)
+-plt.title('% of Total Fares by City Type')
+-plt.savefig('PyChartTotalFares.png')
+-rides_count = type_grouped['ride_id'].count()
+-labels = ['Rural','Suburban','Urban']
+-explode = (0.1,0.1,0.1)
+-colors = ['lightblue','lightgreen','lightcoral']
+-plt.pie(rides_count.compute(live_df=[df_city_data_to_load]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)
+-plt.title('% of Total Rides by City Type')
+-plt.savefig('PyChartTotalRides.png')
+-type_grouped_drivers = df_city_data_to_load.groupby(['type'])
+-drivers_sum = type_grouped_drivers['driver_count'].sum()
+-labels = ['Rural','Suburban','Urban']
+-explode = (0.1,0.1,0.1)
+-colors = ['lightblue','lightgreen','lightcoral']
+-plt.pie(drivers_sum.compute(live_df=[]),explode=explode,labels=labels,colors=colors,autopct='%1.1f%%',shadow=True,startangle=150)
+-plt.title('% of Total Drivers by City Type')
+-plt.savefig('PyChartTotalDrivers.png')
++import matplotlib.pyplot as plt
++file_path = '/home/chiranmoy/IdeaProjects/data/fbi_reports.csv'
++SO_columns = ["Perpetrator Count","Victim Count","Victim Age","City","Weapon"]
++SO_c_d_t = {}
++fbi_data = pd.read_csv(file_path,usecols=SO_columns,dtype=SO_c_d_t)
++fbi_data.info()
++print(fbi_data.head())
++plt.title('Incidents by Year')
++plt.xlabel('Year')
++plt.ylabel('Number of Incidents')
++incidents_by_year = fbi_data.groupby('Year').count()
++plt.plot(incidents_by_year.compute(live_df=[fbi_data]))
++plt.xticks(rotation=20)
++plt.savefig('fig1.png')
++plt.close()
++plt.title('Top 10 Weapons Used')
++weapons_distribution = fbi_data['Weapon'].value_counts().head(10)
++weapons_labels = weapons_distribution.index
++plt.pie(weapons_distribution.compute(live_df=[fbi_data, weapons_labels]),labels=weapons_labels.compute(live_df=[fbi_data]),explode=((([0] * 3) + ([0.25] * 3)) + ([0.75] * 4)),autopct='%1.1f%%')
++plt.savefig('fig2.png')
++plt.close()
++plt.title('Top 10 Most Dangerous Cities')
++plt.xlabel('City')
++plt.ylabel('Number of Incidents')
++dangerous_cities = fbi_data['City'].value_counts().head(10)
++cities_label = dangerous_cities.index
++plt.bar(x=cities_label.compute(live_df=[fbi_data, dangerous_cities]),height=dangerous_cities.compute(live_df=[fbi_data]))
++plt.xticks(rotation=20)
++plt.savefig('fig3.png')
++plt.close()
++average_victim_age_by_race = fbi_data.groupby('Victim Race')['Victim Age'].mean()
++print('Average Victim Age by Race:')
++print(average_victim_age_by_race)
++total_victims = fbi_data['Victim Count'].sum()
++total_perpetrators = fbi_data['Perpetrator Count'].sum()
++print(f'Total Number of Victims: {total_victims}')
++print(f'Total Number of Perpetrators: {total_perpetrators}')

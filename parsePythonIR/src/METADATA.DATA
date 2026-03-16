@@ -1,0 +1,27 @@
+####: data.csv
+1736263847000
+/home/utkarsh/Downloads/LAFP-Utkarsh/data/data.csv
+pickup_datetime,passenger_count,fare_amount,
+str,str,str,
+false,true,false,
+38
+1083736
+
+####: data.csv
+1733798335250
+/home/utkarsh/Desktop/Academic/Rnd2/LAFP/data/data.csv
+pickup_datetime,passenger_count,fare_amount,
+date,int64,float32,
+false,true,false,
+38
+1083736
+
+####: ahs-cab2014-uttar_pradesh-agra.csv
+1730054116000
+/home/utkarsh/Desktop/Academic/Rnd2/LAFP/data/ahs-cab2014-uttar_pradesh-agra.csv
+state_code,district_code,rural_urban,stratum,PSU_ID,ahs_house_unit,house_hold_no,date_survey,test_salt_iodine,record_code_iodine,record_code_iodine_reason,sl_no,Sex,usual_residance,usual_residance_Reason,identification_code,Age_Code,Age,date_of_birth,month_of_birth,year_of_birth,Weight_measured,Weight_in_kg,Length_height_measured,length_height_code,Length_height_cm,Haemoglobin_test,Haemoglobin,Haemoglobin_level,BP_systolic,BP_systolic_2_reading,BP_Diastolic,BP_Diastolic_2reading,Pulse_rate,Pulse_rate_2_reading,Diabetes_test,fasting_blood_glucose,fasting_blood_glucose_mg_dl,Marital_status,gauna_perfor_not_perfor,duration_pregnanacy,first_breast_feeding,is_cur_breast_feeding,day_or_mn_for_breast_feeding_cd,day_or_month_for_breast_feeding,water_month,ani_milk_month,semisolid_month_or_day,solid_month,vegetables_month_or_day,illness_type,illness_duration,treatment_type,
+str,str,str,str,int64,int64,int64,date,int64,str,str,int64,str,str,str,int64,str,int64,int64,int64,int64,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,str,
+true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,false,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,
+245
+7598
+

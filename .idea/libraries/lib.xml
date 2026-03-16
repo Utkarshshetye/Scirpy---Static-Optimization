@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="lib">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/sapjco3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/diffutils-1.2.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/json_simple-1.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

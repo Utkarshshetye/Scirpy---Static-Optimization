@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/InterproceduralAnalysis/InterproceduralAnalysis.iml" filepath="$PROJECT_DIR$/InterproceduralAnalysis/InterproceduralAnalysis.iml" />
+      <module fileurl="file://$PROJECT_DIR$/PJ_v002.iml" filepath="$PROJECT_DIR$/PJ_v002.iml" />
+      <module fileurl="file://$PROJECT_DIR$/parsePythonIR/parsePythonIR.iml" filepath="$PROJECT_DIR$/parsePythonIR/parsePythonIR.iml" />
+      <module fileurl="file://$PROJECT_DIR$/pythonIR/pythonIR.iml" filepath="$PROJECT_DIR$/pythonIR/pythonIR.iml" />
+    </modules>
+  </component>
+</project>

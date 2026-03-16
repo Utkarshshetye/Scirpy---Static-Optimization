@@ -1,0 +1,9 @@
+Do live attribute analysis:
+  1. Find all dfs that are being modified and add in a list.
+  2. Find all dfs who columns are being modified and add in a list.
+  3. If any of the print statement is using these dfs before compute--> put them in the list of statements to be moved.
+  4. shift df stmts that are not
+
+
+  Conditions for graceful exit:
+    1. if the print statement is in loop--for or if, don't optimize and exit.

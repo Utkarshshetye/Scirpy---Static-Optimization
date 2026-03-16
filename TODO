@@ -1,0 +1,69 @@
+//TODO 11/09/2021
+1. Multiple conditions in If
+2. Handle lambda
+
+//TODO old--almost done
+1. Condition in IF should be a type of ConditionExpr which extends BinopExpr---DONE
+2. CODEGEN FOR IF..
+3. NESTED IFS..
+4. Bin Op compatibility with soot..
+5. If condition simplification
+6. Parent Child Relationship..Done
+7. Error in BinOp
+8. Condition Expression in Attribute
+9. Try stmt not implemented
+
+
+
+IMP
+1. Not able to create ValueBox from "Num". Can not implement two classes. therefore, as a hack, extended JPEXpr for that..has to be rewritten properly.
+
+
+
+//TODO TEMP
+
+1. Assignment stmt + callexpr stmt---> try creating jimple/grimple types rather than abstractStmt,,,
+
+//TODO NEW
+1. Vectorization example exploration for football
+2. VLDB paper: add material and references to self paper
+2a. Prepare summary of the paper
+3. Exploratory example for dataframes.(if only head is printed, don't load full data frames)
+4. Work onn data cleansing technologies
+
+
+//TODO in IR
+1. Perform live column analysis for different methods and merge info in main method.
+2. Returning python code with multiple methods:::::IN PROGRESS::::LOT OF ISSUES
+3. ADD CODE FOR FETCHING ARGS OF EACH METHOD(SHOULD BE AVAILABLE WITH SOOT METHOD)
+
+
+//TODO in examples
+1. Share market example
+2. nyc_Taxi example..
+    if parse_dates already exist???.
+
+//TODO for vectorization
+1. Identify iterrow examples..
+
+//TODO
+DATA CLEANING DATA CLEANING DATA CLEANING
+
+
+//TODO
+DATA CLEANING DATA CLEANING DATA CLEANING
+
+
+//TODO Targets
+1. Can we do MSDF and vectorization without Interprocedural?
+2. Efficient Pandas::::Concentrate on Metadata module, save details, indexes etc??
+3. Take MagPie example and execute metadata improvements
+
+//TODO improvement in metadata module
+* Check if date type data, insert that in readCSV
+
+
+
+//TODO COMPLETED
+* If data is being compared, don't use category.---DONE
+
